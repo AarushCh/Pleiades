@@ -2,36 +2,43 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from api.deps import current_user, get_db
+from api.routes_auth import router as auth_router
 from api.schemas import (
     ChatRequest,
+    ConversationOut,
     HealthResponse,
+    MessageOut,
     SearchRequest,
     SearchResponse,
-    SessionResponse,
 )
-from api.sessions import SessionStore
 from src import config
+from src.db import Conversation, Message, SessionLocal, User, init_db, seed_documents
 from src.rag import SupportAssistant
 
 STATE: dict = {}
-SESSIONS = SessionStore()
 DIST = Path(__file__).resolve().parent.parent / "frontend" / "out"
+ORIGINS = [o for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o]
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_: FastAPI):
+    init_db()
     if not config.CHROMA_DIR.exists():
         raise RuntimeError("No vector index. Run: python -m src.ingest")
     STATE["bot"] = await asyncio.to_thread(SupportAssistant)
@@ -40,7 +47,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Nimbus Support API",
+    title="Palades API",
     description="Retrieval-Augmented Generation over enterprise knowledge bases",
     version="1.0.0",
     lifespan=lifespan,
@@ -48,10 +55,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth_router)
 
 
 def bot() -> SupportAssistant:
@@ -59,6 +68,10 @@ def bot() -> SupportAssistant:
     if instance is None:
         raise HTTPException(503, "Assistant is still starting")
     return instance
+
+
+def sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -75,16 +88,16 @@ def health() -> HealthResponse:
 
 
 @app.post("/api/search", response_model=SearchResponse)
-async def search(req: SearchRequest) -> SearchResponse:
+async def search(req: SearchRequest, _: User = Depends(current_user)) -> SearchResponse:
     b = bot()
     start = time.perf_counter()
-    original_k = b.top_k
+    original = b.top_k
     if req.top_k:
         b.top_k = req.top_k
     try:
         r = await asyncio.to_thread(b.retrieve, req.query, [])
     finally:
-        b.top_k = original_k
+        b.top_k = original
     return SearchResponse(
         query=r.query,
         expansions=r.expansions,
@@ -93,32 +106,64 @@ async def search(req: SearchRequest) -> SearchResponse:
     )
 
 
+def _conversation(db: Session, user: User, conversation_id: int | None) -> Conversation:
+    if conversation_id:
+        convo = db.get(Conversation, conversation_id)
+        if convo is None or convo.user_id != user.id:
+            raise HTTPException(404, "Conversation not found")
+        return convo
+    convo = Conversation(user_id=user.id)
+    db.add(convo)
+    db.commit()
+    db.refresh(convo)
+    return convo
+
+
+def _history(convo: Conversation) -> list[tuple[str, str]]:
+    pairs, pending = [], None
+    for m in convo.messages:
+        if m.role == "user":
+            pending = m.content
+        elif pending is not None:
+            pairs.append((pending, m.content))
+            pending = None
+    return pairs[-config.HISTORY_TURNS:]
+
+
 @app.post("/api/chat")
-async def chat(req: ChatRequest) -> StreamingResponse:
+async def chat(
+    req: ChatRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
     b = bot()
-    session = SESSIONS.get(req.session_id)
     question = req.question.strip()
     if not question:
         raise HTTPException(422, "Question is empty")
 
+    convo = _conversation(db, user, req.conversation_id)
+    history = _history(convo)
+    convo_id = convo.id
+    is_first = not convo.messages
+
     async def events():
         start = time.perf_counter()
         try:
-            r = await asyncio.to_thread(b.retrieve, question, session.history)
+            r = await asyncio.to_thread(b.retrieve, question, history)
         except Exception as exc:
             yield sse("error", {"message": f"Retrieval failed: {exc}"})
             return
 
-        retrieval_ms = (time.perf_counter() - start) * 1000
+        tokens = b.prompt_tokens(question, r, history)
         yield sse("meta", {
-            "session_id": session.id,
+            "conversation_id": convo_id,
             "backend": b.backend_name,
             "query": r.query,
             "condensed": r.condensed,
             "expansions": r.expansions,
             "sources": b.sources(r),
-            "retrieval_ms": round(retrieval_ms, 1),
-            "prompt_tokens": b.prompt_tokens(question, r, session.history),
+            "retrieval_ms": round((time.perf_counter() - start) * 1000, 1),
+            "prompt_tokens": tokens,
         })
 
         chunks: list[str] = []
@@ -127,7 +172,7 @@ async def chat(req: ChatRequest) -> StreamingResponse:
 
         def produce():
             try:
-                for token in b.stream(question, r, session.history):
+                for token in b.stream(question, r, history):
                     loop.call_soon_threadsafe(queue.put_nowait, ("token", token))
             except Exception as exc:
                 loop.call_soon_threadsafe(queue.put_nowait, ("error", str(exc)))
@@ -147,15 +192,26 @@ async def chat(req: ChatRequest) -> StreamingResponse:
         await task
 
         answer = "".join(chunks).strip()
-        if answer:
-            session.history.append((question, answer))
-            if len(session.history) > 20:
-                del session.history[:-20]
+        elapsed = round((time.perf_counter() - start) * 1000)
 
-        yield sse("done", {
-            "total_ms": round((time.perf_counter() - start) * 1000, 1),
-            "turns": len(session.history),
-        })
+        if answer:
+            with SessionLocal() as write:
+                convo_row = write.get(Conversation, convo_id)
+                if convo_row is not None:
+                    write.add(Message(conversation_id=convo_id, role="user", content=question))
+                    write.add(Message(
+                        conversation_id=convo_id,
+                        role="assistant",
+                        content=answer,
+                        sources=json.dumps(b.sources(r), ensure_ascii=False),
+                        prompt_tokens=tokens,
+                        latency_ms=elapsed,
+                    ))
+                    if is_first:
+                        convo_row.title = question[:80]
+                    write.commit()
+
+        yield sse("done", {"total_ms": elapsed, "conversation_id": convo_id})
 
     return StreamingResponse(
         events(),
@@ -164,20 +220,56 @@ async def chat(req: ChatRequest) -> StreamingResponse:
     )
 
 
-def sse(event: str, data: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+@app.get("/api/conversations", response_model=list[ConversationOut])
+def list_conversations(
+    user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> list[ConversationOut]:
+    rows = db.scalars(
+        select(Conversation)
+        .where(Conversation.user_id == user.id)
+        .order_by(Conversation.updated_at.desc())
+        .limit(50)
+    ).all()
+    return [
+        ConversationOut(id=c.id, title=c.title, updated_at=c.updated_at, turns=len(c.messages))
+        for c in rows
+    ]
 
 
-@app.post("/api/session/{session_id}/reset", response_model=SessionResponse)
-def reset_session(session_id: str) -> SessionResponse:
-    s = SESSIONS.reset(session_id)
-    return SessionResponse(session_id=s.id, turns=len(s.history))
+@app.get("/api/conversations/{conversation_id}", response_model=list[MessageOut])
+def get_conversation(
+    conversation_id: int,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[MessageOut]:
+    convo = _conversation(db, user, conversation_id)
+    return [
+        MessageOut(
+            role=m.role,
+            content=m.content,
+            sources=json.loads(m.sources) if m.sources else None,
+            prompt_tokens=m.prompt_tokens,
+            latency_ms=m.latency_ms,
+        )
+        for m in convo.messages
+    ]
 
 
-@app.get("/api/session/{session_id}", response_model=SessionResponse)
-def get_session(session_id: str) -> SessionResponse:
-    s = SESSIONS.get(session_id)
-    return SessionResponse(session_id=s.id, turns=len(s.history))
+@app.delete("/api/conversations/{conversation_id}")
+def delete_conversation(
+    conversation_id: int,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    convo = _conversation(db, user, conversation_id)
+    db.delete(convo)
+    db.commit()
+    return {"deleted": conversation_id}
+
+
+@app.post("/api/admin/reseed")
+def reseed(user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    return {"synced": seed_documents(db)}
 
 
 if DIST.exists():

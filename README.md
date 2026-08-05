@@ -1,4 +1,6 @@
-# Generative AI-Based Intelligent Customer Support System
+# Palades
+
+Generative AI-based intelligent customer support over enterprise knowledge bases.
 
 Retrieval-Augmented Generation over enterprise knowledge bases. A customer question is matched
 against a ChromaDB index built from FAQs, product manuals, policy documents, a product catalog
@@ -62,30 +64,59 @@ single port. `npm run dev` instead runs Next on `:5173` and proxies `/api` to `:
 
 ## Deploying
 
-The stack has two independent halves, and only the model half has real hosting cost.
+Two services. Both have usable free tiers.
 
-**Everything except the model is nearly free to host.** FastAPI plus a static Next export plus
-ChromaDB is one container with no external database. It fits the free or hobby tier of Render,
-Railway, Fly.io or Azure Container Apps. ChromaDB persists to disk, so mount a volume, or bake
-the index into the image as the Dockerfile already does. Rebuild the image when `data/` changes.
+**1. Database — Supabase** (Neon works unchanged; the schema is plain Postgres)
+Create a project, copy the connection string from Settings → Database, and set it as
+`DATABASE_URL`. Run `python -m src.db` once to create the schema and seed the documents table.
+Without `DATABASE_URL` the app falls back to a local SQLite file, so development needs no setup.
 
-**Ollama does not survive the move to a server unchanged.** Locally it is free because your own
-machine provides the RAM. On a host you are renting that RAM:
+**2. App — Render** (`render.yaml` is committed; Railway and Fly.io work the same way)
+Point Render at the repo and set four secrets:
 
-| Option | What it costs | When it makes sense |
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | Supabase connection string |
+| `GROQ_API_KEY` | from console.groq.com/keys |
+| `JWT_SECRET` | generated automatically by `render.yaml` |
+| `CORS_ORIGINS` | your deployed origin, only if the UI is hosted separately |
+
+The Dockerfile builds the Next.js UI, installs the API, bakes the vector index into the image,
+and honours the platform's `$PORT`. One container serves the API and the UI, so no CORS setup is
+needed in the default single-origin deployment.
+
+### Why Chroma still works in production
+
+The index is built at image build time and read-only at runtime, so an ephemeral container
+filesystem is not a problem. Rebuild the image when `data/` changes. Postgres holds the mutable
+state: users, conversations, messages, and the document bodies the index is derived from.
+
+### Ollama does not move to a server unchanged
+
+Locally it is free because your machine provides the RAM. On a host you rent that RAM, and free
+tiers cap memory below the ~5 GB Llama 3 8B needs.
+
+| Option | Cost | When |
 |---|---|---|
-| Hosted Llama 3 API (Groq, Together, Fireworks) | Free tier or per-token | Default. No GPU to rent, no cold starts. Change one env var |
-| Ollama on a CPU VM | ~8 GB RAM instance, a few dollars a month | Llama 3 8B on CPU answers in roughly 10-30 s. Fine for a private demo, too slow for users |
-| Ollama on a GPU VM | Substantially more per month | Only when data genuinely cannot leave your infrastructure |
-| Ollama on free tiers | Not possible | Free tiers cap memory well below the ~5 GB the model needs |
+| Hosted Llama 3 API (Groq, Together, Fireworks) | Free tier or per-token | Default. No GPU, no cold start |
+| Ollama on a CPU VM | ~8 GB instance, a few dollars a month | 10-30 s answers. Private demo only |
+| Ollama on a GPU VM | Substantially more | Only when data cannot leave your infrastructure |
+| Ollama on a free tier | Not possible | Memory caps sit below the model size |
 
-The backend abstraction is what makes this a configuration change rather than a rewrite. Deploy
-with `LLM_BACKEND=groq` and the container needs no GPU and about 512 MB of RAM. If the
-organisation later requires on-premise inference, point `OLLAMA_BASE_URL` at an Ollama box and
-nothing else changes.
+Deploy with `LLM_BACKEND=groq` and the container needs no GPU and about 512 MB of RAM. If
+on-premise inference is later required, point `OLLAMA_BASE_URL` at an Ollama box; nothing else
+changes.
 
-Set `GROQ_API_KEY` as a platform secret rather than shipping `.env`, and add your deployed
-origin to the CORS allowlist in `api/main.py` if the frontend is hosted separately.
+## Accounts and data
+
+Signup and login are email plus a bcrypt-hashed password, with a signed JWT held in the browser
+and verified on every request. Conversations and messages are written to Postgres and scoped to
+their owner: requesting another user's conversation returns 404, not their data. Tests cover
+that boundary.
+
+The `documents` table is the source of truth for the knowledge base. `python -m src.ingest`
+reads from it and falls back to `data/*.md` when the table is empty, so the corpus can be
+edited in the database without touching the repository.
 
 ## Retrieval
 

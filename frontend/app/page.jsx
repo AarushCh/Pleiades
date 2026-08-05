@@ -1,7 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getHealth, resetSession, streamChat } from "../lib/api";
+import {
+  deleteConversation,
+  getConversation,
+  getHealth,
+  getMe,
+  listConversations,
+  readSession,
+  streamChat,
+  writeSession,
+} from "../lib/api";
+import AuthGate from "../components/AuthGate";
 import { Btn3, Btn12 } from "../components/Buttons";
 import Details from "../components/Details";
 import Markdown from "../components/Markdown";
@@ -40,12 +50,14 @@ const SAMPLES = [
 ];
 
 export default function Page() {
+  const [session, setSession] = useState(undefined);
   const [health, setHealth] = useState(null);
   const [healthError, setHealthError] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [convos, setConvos] = useState([]);
+  const [convoId, setConvoId] = useState(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [sessionId, setSessionId] = useState(null);
   const [theme, setTheme] = useState("dark");
 
   const bottomRef = useRef(null);
@@ -53,8 +65,28 @@ export default function Page() {
   const abortRef = useRef(null);
 
   useEffect(() => {
-    getHealth().then(setHealth).catch((e) => setHealthError(e.message));
+    const stored = readSession();
+    if (!stored) {
+      setSession(null);
+      return;
+    }
+    getMe()
+      .then(() => setSession(stored))
+      .catch(() => {
+        writeSession(null);
+        setSession(null);
+      });
   }, []);
+
+  const refreshConvos = useCallback(() => {
+    listConversations().then(setConvos).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    getHealth().then(setHealth).catch((e) => setHealthError(e.message));
+    refreshConvos();
+  }, [session, refreshConvos]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -87,10 +119,10 @@ export default function Page() {
       try {
         await streamChat({
           question: q,
-          sessionId,
+          conversationId: convoId,
           signal: controller.signal,
           onMeta: (meta) => {
-            setSessionId((cur) => cur ?? meta.session_id);
+            setConvoId((cur) => cur ?? meta.conversation_id);
             patch({ meta });
           },
           onToken: (text) =>
@@ -100,7 +132,10 @@ export default function Page() {
               next[next.length - 1] = { ...last, content: last.content + text };
               return next;
             }),
-          onDone: () => patch({ totalMs: performance.now() - started }),
+          onDone: () => {
+            patch({ totalMs: performance.now() - started });
+            refreshConvos();
+          },
           onError: (message) => patch({ error: message }),
         });
       } catch (e) {
@@ -111,25 +146,93 @@ export default function Page() {
         inputRef.current?.focus();
       }
     },
-    [busy, sessionId]
+    [busy, convoId, refreshConvos]
   );
 
-  const clear = async () => {
+  const openConvo = async (id) => {
     abortRef.current?.abort();
-    await resetSession(sessionId);
+    const rows = await getConversation(id);
+    setConvoId(id);
+    setMessages(
+      rows.map((m) =>
+        m.role === "user"
+          ? { role: "user", content: m.content }
+          : {
+              role: "bot",
+              content: m.content,
+              meta: m.sources
+                ? { sources: m.sources, prompt_tokens: m.prompt_tokens, expansions: [] }
+                : null,
+              totalMs: m.latency_ms,
+            }
+      )
+    );
+  };
+
+  const removeConvo = async (id) => {
+    await deleteConversation(id);
+    if (id === convoId) {
+      setConvoId(null);
+      setMessages([]);
+    }
+    refreshConvos();
+  };
+
+  const newConvo = () => {
+    abortRef.current?.abort();
+    setConvoId(null);
     setMessages([]);
   };
+
+  const signOut = () => {
+    writeSession(null);
+    setSession(null);
+    setMessages([]);
+    setConvos([]);
+    setConvoId(null);
+  };
+
+  if (session === undefined) return null;
+  if (!session) return <AuthGate onAuthenticated={setSession} />;
 
   return (
     <div className="shell">
       <aside className="glass sidebar">
         <div className="brand">
-          <div className="brand__mark">N</div>
+          <div className="brand__mark">P</div>
           <div>
-            <h1>Nimbus Support</h1>
-            <p>Enterprise RAG assistant</p>
+            <h1>Palades</h1>
+            <p>Nimbus Networks workspace</p>
           </div>
         </div>
+
+        <section>
+          <h2 className="side-h">Conversations</h2>
+          <Btn3 variant="quiet" size="sm" onClick={newConvo} style={{ width: "100%", marginBottom: 9 }}>
+            New conversation
+          </Btn3>
+          <div className="convos">
+            {convos.length === 0 && <p className="stage__detail">No history yet</p>}
+            {convos.map((c) => (
+              <div className="convo" key={c.id}>
+                <button
+                  className={`convo__open ${c.id === convoId ? "on" : ""}`}
+                  onClick={() => openConvo(c.id)}
+                  title={c.title}
+                >
+                  {c.title}
+                </button>
+                <button
+                  className="convo__del"
+                  onClick={() => removeConvo(c.id)}
+                  aria-label={`Delete ${c.title}`}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
 
         <section>
           <h2 className="side-h">Pipeline</h2>
@@ -146,23 +249,16 @@ export default function Page() {
               </dd>
             </dl>
           )}
-          {health && !health.has_llm && (
-            <div className="alert">
-              No language model connected. Retrieval works; answers are extracted verbatim.
-            </div>
-          )}
-        </section>
-
-        <section>
-          <h2 className="side-h">Knowledge base</h2>
-          <ul className="kb">
-            {health?.documents.map((d) => (
-              <li key={d}>{d}</li>
-            ))}
-          </ul>
         </section>
 
         <div className="sidebar__foot">
+          <div className="who">
+            <div className="who__avatar">{(session.name || "?")[0].toUpperCase()}</div>
+            <div style={{ minWidth: 0 }}>
+              <div className="who__name">{session.name}</div>
+              <div className="who__email">{session.email}</div>
+            </div>
+          </div>
           <Btn3
             variant="quiet"
             size="sm"
@@ -170,8 +266,8 @@ export default function Page() {
           >
             {theme === "dark" ? "Light mode" : "Dark mode"}
           </Btn3>
-          <Btn3 size="sm" onClick={clear} disabled={!messages.length}>
-            Clear conversation
+          <Btn3 size="sm" onClick={signOut}>
+            Sign out
           </Btn3>
         </div>
       </aside>
@@ -218,7 +314,7 @@ export default function Page() {
               </div>
             ) : (
               <div className="turn--bot" key={i}>
-                <div className="turn__avatar">N</div>
+                <div className="turn__avatar">P</div>
                 <div className="turn__body">
                   {m.content ? (
                     <Markdown text={m.content} />

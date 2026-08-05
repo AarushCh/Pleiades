@@ -2,7 +2,7 @@ import "./globals.css";
 import "./chat.css";
 
 export const metadata = {
-  title: "Nimbus Support Assistant",
+  title: "Palades",
   description: "Retrieval-Augmented Generation over enterprise knowledge bases",
 };
 

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
-    session_id: str | None = None
+    conversation_id: int | None = None
 
 
 class SearchRequest(BaseModel):
@@ -37,6 +39,16 @@ class HealthResponse(BaseModel):
     documents: list[str]
 
 
-class SessionResponse(BaseModel):
-    session_id: str
+class ConversationOut(BaseModel):
+    id: int
+    title: str
+    updated_at: datetime
     turns: int
+
+
+class MessageOut(BaseModel):
+    role: str
+    content: str
+    sources: list[SourceOut] | None = None
+    prompt_tokens: int = 0
+    latency_ms: int = 0

@@ -23,8 +23,9 @@ COPY --from=ui /ui/out ./frontend/out
 
 RUN python -m src.ingest
 
+ENV PORT=8000
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s \
-    CMD curl -fsS http://localhost:8000/api/health || exit 1
+    CMD curl -fsS http://localhost:${PORT:-8000}/api/health || exit 1
 
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

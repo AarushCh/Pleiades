@@ -15,9 +15,13 @@ HEADERS = [("#", "doc_title"), ("##", "section"), ("###", "subsection")]
 
 
 def load_documents() -> list[Document]:
+    rows = _from_database()
+    if rows:
+        return rows
+
     paths = sorted(config.DATA_DIR.glob("**/*.md"))
     if not paths:
-        raise SystemExit(f"No .md files found in {config.DATA_DIR}")
+        raise SystemExit(f"No documents in the database and no .md files in {config.DATA_DIR}")
     return [
         Document(
             page_content=p.read_text(encoding="utf-8"),
@@ -28,6 +32,25 @@ def load_documents() -> list[Document]:
             },
         )
         for p in paths
+    ]
+
+
+def _from_database() -> list[Document]:
+    try:
+        from src.db import load_documents_from_db
+
+        rows = load_documents_from_db()
+    except Exception:
+        return []
+
+    return [
+        Document(
+            page_content=body,
+            metadata={"source": f"db://documents/{filename}",
+                      "filename": filename,
+                      "source_label": label},
+        )
+        for filename, label, body in rows
     ]
 
 

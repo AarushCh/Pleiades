@@ -1,19 +1,55 @@
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
+const KEY = "palades.session";
 
-export async function getHealth() {
-  const res = await fetch(`${BASE}/api/health`);
-  if (!res.ok) throw new Error(`Health check failed (${res.status})`);
-  return res.json();
+export function readSession() {
+  if (typeof window === "undefined") return null;
+  try {
+    return JSON.parse(localStorage.getItem(KEY) || "null");
+  } catch {
+    return null;
+  }
 }
 
-export async function resetSession(sessionId) {
-  if (!sessionId) return;
-  await fetch(`${BASE}/api/session/${sessionId}/reset`, { method: "POST" });
+export function writeSession(session) {
+  if (session) localStorage.setItem(KEY, JSON.stringify(session));
+  else localStorage.removeItem(KEY);
 }
+
+function authHeaders() {
+  const s = readSession();
+  return s?.token ? { Authorization: `Bearer ${s.token}` } : {};
+}
+
+async function jsonFetch(path, options = {}) {
+  const res = await fetch(BASE + path, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...(options.headers || {}),
+    },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.detail || `Request failed (${res.status})`);
+  return body;
+}
+
+export const signup = (payload) =>
+  jsonFetch("/api/auth/signup", { method: "POST", body: JSON.stringify(payload) });
+
+export const login = (payload) =>
+  jsonFetch("/api/auth/login", { method: "POST", body: JSON.stringify(payload) });
+
+export const getMe = () => jsonFetch("/api/auth/me");
+export const getHealth = () => jsonFetch("/api/health");
+export const listConversations = () => jsonFetch("/api/conversations");
+export const getConversation = (id) => jsonFetch(`/api/conversations/${id}`);
+export const deleteConversation = (id) =>
+  jsonFetch(`/api/conversations/${id}`, { method: "DELETE" });
 
 export async function streamChat({
   question,
-  sessionId,
+  conversationId,
   signal,
   onMeta,
   onToken,
@@ -22,13 +58,13 @@ export async function streamChat({
 }) {
   const res = await fetch(`${BASE}/api/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, session_id: sessionId }),
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ question, conversation_id: conversationId }),
     signal,
   });
 
   if (!res.ok || !res.body) {
-    onError(`Request failed (${res.status})`);
+    onError(res.status === 401 ? "Session expired, sign in again" : `Request failed (${res.status})`);
     return;
   }
 
