@@ -1,0 +1,12 @@
+.venv/
+chroma_db/
+.env
+.git/
+.vscode/
+__pycache__/
+*.pyc
+.pytest_cache/
+frontend/node_modules/
+frontend/dist/
+tests/
+New.py
