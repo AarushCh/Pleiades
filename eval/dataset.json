@@ -1,0 +1,130 @@
+[
+  {
+    "id": "led-amber",
+    "question": "My internet light is solid orange and I have no connection. What do I do?",
+    "expected_sections": [
+      "1. LED status indicators"
+    ],
+    "note": "Customer says orange, the manual says amber"
+  },
+  {
+    "id": "doa-override",
+    "question": "My router died 4 days after it arrived. Do I have to do the triage steps first?",
+    "expected_sections": [
+      "5. Dead on arrival (DOA)"
+    ],
+    "note": "DOA clause overrides the standard triage requirement"
+  },
+  {
+    "id": "sla-credit",
+    "question": "I was down for about 3 days last month. Do I get anything back?",
+    "expected_sections": [
+      "SLA service credits"
+    ],
+    "note": "The credit table shares no vocabulary with the customer wording"
+  },
+  {
+    "id": "plan-compare",
+    "question": "What is the difference between the Plus and Max plans?",
+    "expected_sections": [
+      "Residential plans"
+    ],
+    "note": "Structured table lookup"
+  },
+  {
+    "id": "first-bill",
+    "question": "Why is my first bill so much higher than the plan price?",
+    "expected_sections": [
+      "Why is my first bill higher than my plan price?"
+    ],
+    "note": "Most common real billing complaint"
+  },
+  {
+    "id": "payment-failed",
+    "question": "My card was declined. How long before you cut me off?",
+    "expected_sections": [
+      "What happens if my payment fails?"
+    ],
+    "note": "Needs the grace and suspension timeline"
+  },
+  {
+    "id": "wifi-5ghz",
+    "question": "I cannot see the 5 GHz network on my new router in Bengaluru.",
+    "expected_sections": [
+      "Cannot see the 5 GHz network"
+    ],
+    "note": "Region-specific channel restriction",
+    "expected_contains": [
+      "TKT-11190"
+    ]
+  },
+  {
+    "id": "iot-drops",
+    "question": "My smart bulbs and plugs keep dropping off the wifi.",
+    "expected_sections": [
+      "Devices disconnect every few minutes"
+    ],
+    "note": "Root cause spans the manual and a resolved ticket",
+    "expected_contains": [
+      "TKT-10677"
+    ]
+  },
+  {
+    "id": "annual-refund",
+    "question": "I paid for a year but want to quit after 5 months. Do I get the rest back?",
+    "expected_sections": [
+      "How do I cancel my subscription?"
+    ],
+    "note": "Pro-rata minus administrative charge"
+  },
+  {
+    "id": "rma-stuck",
+    "question": "My replacement has not arrived after three weeks. What are my options?",
+    "expected_sections": [
+      "6. Escalation"
+    ],
+    "note": "Agent can apply the remedy without manager approval"
+  },
+  {
+    "id": "firmware-drops",
+    "question": "Our office connection drops for a few minutes every hour.",
+    "expected_sections": [],
+    "note": "Answer lives in a resolved ticket, not the manual",
+    "expected_contains": [
+      "TKT-10913"
+    ]
+  },
+  {
+    "id": "router-return",
+    "question": "If I cancel, do I have to send the router back?",
+    "expected_sections": [
+      "Residential plans",
+      "2. Return window"
+    ],
+    "note": "21 day window and the charge if missed"
+  },
+  {
+    "id": "port-forward",
+    "question": "Can I forward port 25 for a mail server at home?",
+    "expected_sections": [
+      "5. Port forwarding"
+    ],
+    "note": "Blocked upstream on residential plans"
+  },
+  {
+    "id": "gst-invoice",
+    "question": "I need my company GST number on the invoice.",
+    "expected_sections": [
+      "How do I get a GST invoice?"
+    ],
+    "note": "Cutoff date and no retroactive reissue"
+  },
+  {
+    "id": "business-sla",
+    "question": "What uptime guarantee do I get on a business gigabit line?",
+    "expected_sections": [
+      "Business plans"
+    ],
+    "note": "99.9 percent and a 2 hour response target"
+  }
+]
