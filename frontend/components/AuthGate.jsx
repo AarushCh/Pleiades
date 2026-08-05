@@ -37,7 +37,7 @@ export default function AuthGate({ onAuthenticated }) {
         <div className="auth__brand">
           <div className="brand__mark">P</div>
           <div>
-            <h1>Palades</h1>
+            <h1>Pleiades</h1>
             <p>Enterprise support intelligence</p>
           </div>
         </div>

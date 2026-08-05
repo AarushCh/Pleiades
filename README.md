@@ -1,4 +1,4 @@
-# Palades
+# Pleiades
 
 Generative AI-based intelligent customer support over enterprise knowledge bases.
 

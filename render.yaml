@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: palades
+    name: pleiades
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free

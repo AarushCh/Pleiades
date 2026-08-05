@@ -201,7 +201,7 @@ export default function Page() {
         <div className="brand">
           <div className="brand__mark">P</div>
           <div>
-            <h1>Palades</h1>
+            <h1>Pleiades</h1>
             <p>Nimbus Networks workspace</p>
           </div>
         </div>

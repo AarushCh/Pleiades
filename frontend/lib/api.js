@@ -1,5 +1,5 @@
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
-const KEY = "palades.session";
+const KEY = "pleiades.session";
 
 export function readSession() {
   if (typeof window === "undefined") return null;

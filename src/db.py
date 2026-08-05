@@ -22,7 +22,7 @@ from src import config
 def database_url() -> str:
     url = os.getenv("DATABASE_URL", "").strip()
     if not url:
-        return f"sqlite:///{config.ROOT / 'palades.db'}"
+        return f"sqlite:///{config.ROOT / 'pleiades.db'}"
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+psycopg://", 1)
     elif url.startswith("postgresql://"):
@@ -32,11 +32,25 @@ def database_url() -> str:
 
 URL = database_url()
 IS_SQLITE = URL.startswith("sqlite")
+IS_POOLED = "pooler." in URL or ":6543" in URL
+
+
+def _connect_args() -> dict:
+    if IS_SQLITE:
+        return {"check_same_thread": False}
+    args: dict = {"connect_timeout": 10}
+    if IS_POOLED:
+        args["prepare_threshold"] = None
+    return args
+
 
 engine = create_engine(
     URL,
     pool_pre_ping=True,
-    connect_args={"check_same_thread": False} if IS_SQLITE else {},
+    pool_recycle=280,
+    pool_size=5,
+    max_overflow=5,
+    connect_args=_connect_args(),
 )
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 

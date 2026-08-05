@@ -47,7 +47,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="Palades API",
+    title="Pleiades API",
     description="Retrieval-Augmented Generation over enterprise knowledge bases",
     version="1.0.0",
     lifespan=lifespan,
