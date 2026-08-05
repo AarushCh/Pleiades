@@ -10,17 +10,29 @@ $target = if ($args.Count) { $args[0] } else { "app" }
 
 switch ($target) {
     "app" {
-        if (-not (Test-Path "frontend\dist\index.html")) {
+        if (-not (Test-Path "frontend\out\index.html")) {
             Write-Host "Building frontend..." -ForegroundColor Cyan
-            Push-Location frontend; npm install; npm run build; Pop-Location
+            Push-Location frontend
+            if (-not (Test-Path "node_modules")) { npm install }
+            npm run build
+            Pop-Location
         }
         Write-Host "http://localhost:8000" -ForegroundColor Green
         & $py -m uvicorn api.main:app --port 8000
     }
+    "build" {
+        Push-Location frontend
+        if (-not (Test-Path "node_modules")) { npm install }
+        npm run build
+        Pop-Location
+    }
     "dev" {
-        Write-Host "API on :8000, Vite on :5173" -ForegroundColor Green
+        Write-Host "API on :8000, Next on http://localhost:5173" -ForegroundColor Green
         Start-Process $py -ArgumentList "-m", "uvicorn", "api.main:app", "--port", "8000", "--reload"
-        Push-Location frontend; npm run dev; Pop-Location
+        Push-Location frontend
+        if (-not (Test-Path "node_modules")) { npm install }
+        npm run dev
+        Pop-Location
     }
     "cli"       { & $py -m src.cli @($args | Select-Object -Skip 1) }
     "demo"      { & $py -m src.cli --demo }
@@ -32,7 +44,8 @@ switch ($target) {
     default {
         Write-Host "Usage: .\run.ps1 [target]"
         Write-Host "  app        build frontend and serve the full stack on :8000 (default)"
-        Write-Host "  dev        API with reload plus the Vite dev server"
+        Write-Host "  build      build the Next.js frontend only"
+        Write-Host "  dev        API with reload plus the Next.js dev server on :5173"
         Write-Host "  cli        interactive terminal client"
         Write-Host "  demo       scripted walkthrough"
         Write-Host "  streamlit  alternative Streamlit UI"

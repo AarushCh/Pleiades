@@ -13,14 +13,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir "fastapi>=0.115" "uvicorn[standard]>=0.30"
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ ./src/
 COPY api/ ./api/
 COPY data/ ./data/
 COPY eval/ ./eval/
-COPY --from=ui /ui/dist ./frontend/dist
+COPY --from=ui /ui/out ./frontend/out
 
 RUN python -m src.ingest
 

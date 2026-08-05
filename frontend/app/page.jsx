@@ -1,51 +1,56 @@
+"use client";
+
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getHealth, resetSession, streamChat } from "./api";
-import { Details, Markdown } from "./components";
+import { getHealth, resetSession, streamChat } from "../lib/api";
+import { Btn3, Btn12 } from "../components/Buttons";
+import Details from "../components/Details";
+import Markdown from "../components/Markdown";
 
 const SAMPLES = [
   {
     title: "Solid orange light",
-    text: "My internet light is solid orange and I have no connection. What do I do?",
     note: "Pulls the manual and a matching resolved ticket",
+    text: "My internet light is solid orange and I have no connection. What do I do?",
   },
   {
     title: "Router died in 4 days",
-    text: "My router died 4 days after it arrived. Do I have to do the triage steps first?",
     note: "DOA clause overrides the normal triage rule",
+    text: "My router died 4 days after it arrived. Do I have to do the triage steps first?",
   },
   {
     title: "Three days of downtime",
-    text: "I was down for about 3 days last month. Do I get anything back?",
     note: "Needs the billing FAQ and the SLA table together",
+    text: "I was down for about 3 days last month. Do I get anything back?",
   },
   {
     title: "Compare plans",
-    text: "What is the difference between the Plus and Max plans?",
     note: "Structured lookup from the catalog",
+    text: "What is the difference between the Plus and Max plans?",
   },
   {
     title: "First bill too high",
-    text: "Why is my first bill higher than my plan price?",
     note: "The most common real billing complaint",
+    text: "Why is my first bill higher than my plan price?",
   },
   {
     title: "Out of scope",
-    text: "Who won the world cup in 2018?",
     note: "Should refuse rather than guess",
+    text: "Who won the world cup in 2018?",
   },
 ];
 
-export default function App() {
+export default function Page() {
   const [health, setHealth] = useState(null);
   const [healthError, setHealthError] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [sessionId, setSessionId] = useState(null);
+  const [theme, setTheme] = useState("dark");
 
   const bottomRef = useRef(null);
-  const abortRef = useRef(null);
   const inputRef = useRef(null);
+  const abortRef = useRef(null);
 
   useEffect(() => {
     getHealth().then(setHealth).catch((e) => setHealthError(e.message));
@@ -55,6 +60,10 @@ export default function App() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
   const send = useCallback(
     async (question) => {
       const q = question.trim();
@@ -62,7 +71,7 @@ export default function App() {
 
       setInput("");
       setBusy(true);
-      setMessages((m) => [...m, { role: "user", content: q }, { role: "assistant", content: "" }]);
+      setMessages((m) => [...m, { role: "user", content: q }, { role: "bot", content: "" }]);
 
       const controller = new AbortController();
       abortRef.current = controller;
@@ -81,7 +90,7 @@ export default function App() {
           sessionId,
           signal: controller.signal,
           onMeta: (meta) => {
-            if (!sessionId) setSessionId(meta.session_id);
+            setSessionId((cur) => cur ?? meta.session_id);
             patch({ meta });
           },
           onToken: (text) =>
@@ -113,9 +122,9 @@ export default function App() {
 
   return (
     <div className="shell">
-      <aside className="sidebar">
+      <aside className="glass sidebar">
         <div className="brand">
-          <div className="brand-mark">N</div>
+          <div className="brand__mark">N</div>
           <div>
             <h1>Nimbus Support</h1>
             <p>Enterprise RAG assistant</p>
@@ -123,7 +132,7 @@ export default function App() {
         </div>
 
         <section>
-          <h2>Pipeline</h2>
+          <h2 className="side-h">Pipeline</h2>
           {healthError && <div className="alert">API unreachable — {healthError}</div>}
           {health && (
             <dl className="spec">
@@ -145,7 +154,7 @@ export default function App() {
         </section>
 
         <section>
-          <h2>Knowledge base</h2>
+          <h2 className="side-h">Knowledge base</h2>
           <ul className="kb">
             {health?.documents.map((d) => (
               <li key={d}>{d}</li>
@@ -153,28 +162,50 @@ export default function App() {
           </ul>
         </section>
 
-        <div className="sidebar-foot">
-          <button className="ghost" onClick={clear} disabled={!messages.length}>
+        <div className="sidebar__foot">
+          <Btn3
+            variant="quiet"
+            size="sm"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          >
+            {theme === "dark" ? "Light mode" : "Dark mode"}
+          </Btn3>
+          <Btn3 size="sm" onClick={clear} disabled={!messages.length}>
             Clear conversation
-          </button>
+          </Btn3>
         </div>
       </aside>
 
-      <main className="main">
+      <main className="glass main">
+        <div className="topbar">
+          <div>
+            <h2>Support conversation</h2>
+            <p>Grounded in five internal documents, with citations</p>
+          </div>
+          <span className="live">
+            <span className={`live__dot ${healthError ? "live__dot--off" : ""}`} />
+            {healthError ? "offline" : busy ? "generating" : "ready"}
+          </span>
+        </div>
+
         <div className="thread">
           {messages.length === 0 && (
             <div className="welcome">
+              <span className="welcome__kicker">Retrieval-Augmented Generation</span>
               <h2>Ask about billing, hardware, plans or troubleshooting</h2>
               <p>
-                Answers are grounded in five internal documents and cite the section they came
-                from. Try one of these:
+                Every answer is grounded in the knowledge base and cites the document and section
+                it came from. Pick a question to see the retrieval pipeline work.
               </p>
               <div className="samples">
                 {SAMPLES.map((s) => (
-                  <button key={s.title} onClick={() => send(s.text)} disabled={busy}>
-                    <strong>{s.title}</strong>
-                    <span>{s.note}</span>
-                  </button>
+                  <Btn12
+                    key={s.title}
+                    title={s.title}
+                    note={s.note}
+                    disabled={busy}
+                    onClick={() => send(s.text)}
+                  />
                 ))}
               </div>
             </div>
@@ -182,17 +213,17 @@ export default function App() {
 
           {messages.map((m, i) =>
             m.role === "user" ? (
-              <div className="turn user" key={i}>
+              <div className="turn--user" key={i}>
                 <div className="bubble">{m.content}</div>
               </div>
             ) : (
-              <div className="turn assistant" key={i}>
-                <div className="avatar">N</div>
-                <div className="body">
+              <div className="turn--bot" key={i}>
+                <div className="turn__avatar">N</div>
+                <div className="turn__body">
                   {m.content ? (
                     <Markdown text={m.content} />
                   ) : m.error ? null : (
-                    <div className="thinking">
+                    <div className="dots">
                       <span />
                       <span />
                       <span />
@@ -220,10 +251,11 @@ export default function App() {
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask about billing, hardware, plans, or troubleshooting…"
             disabled={busy}
+            aria-label="Your question"
           />
-          <button type="submit" disabled={busy || !input.trim()}>
-            {busy ? "…" : "Send"}
-          </button>
+          <Btn3 type="submit" disabled={busy || !input.trim()}>
+            {busy ? "Sending" : "Send"}
+          </Btn3>
         </form>
       </main>
     </div>

@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_BASE ?? "";
+const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
 export async function getHealth() {
   const res = await fetch(`${BASE}/api/health`);
@@ -11,17 +11,15 @@ export async function resetSession(sessionId) {
   await fetch(`${BASE}/api/session/${sessionId}/reset`, { method: "POST" });
 }
 
-export async function search(query, topK) {
-  const res = await fetch(`${BASE}/api/search`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, top_k: topK }),
-  });
-  if (!res.ok) throw new Error(`Search failed (${res.status})`);
-  return res.json();
-}
-
-export async function streamChat({ question, sessionId, signal, onMeta, onToken, onDone, onError }) {
+export async function streamChat({
+  question,
+  sessionId,
+  signal,
+  onMeta,
+  onToken,
+  onDone,
+  onError,
+}) {
   const res = await fetch(`${BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -38,7 +36,7 @@ export async function streamChat({ question, sessionId, signal, onMeta, onToken,
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
+  for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
@@ -48,16 +46,16 @@ export async function streamChat({ question, sessionId, signal, onMeta, onToken,
 
     for (const frame of frames) {
       let event = "message";
-      const dataLines = [];
+      const data = [];
       for (const line of frame.split("\n")) {
         if (line.startsWith("event:")) event = line.slice(6).trim();
-        else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+        else if (line.startsWith("data:")) data.push(line.slice(5).trim());
       }
-      if (!dataLines.length) continue;
+      if (!data.length) continue;
 
       let payload;
       try {
-        payload = JSON.parse(dataLines.join("\n"));
+        payload = JSON.parse(data.join("\n"));
       } catch {
         continue;
       }

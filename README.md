@@ -20,8 +20,8 @@ The demo tenant is **Nimbus Networks**, a fictional ISP.
 
 | Command | What it does |
 |---|---|
-| `.\run.ps1` | Builds the React UI and serves API + UI on `:8000` |
-| `.\run.ps1 dev` | API with reload on `:8000`, Vite dev server on `:5173` |
+| `.\run.ps1` | Builds the Next.js UI and serves API + UI on `:8000` |
+| `.\run.ps1 dev` | API with reload on `:8000`, Next dev server on `:5173` |
 | `.\run.ps1 demo` | Scripted five-question walkthrough in the terminal |
 | `.\run.ps1 cli` | Interactive terminal client |
 | `.\run.ps1 test` | pytest suite (24 tests) |
@@ -33,7 +33,7 @@ Interactive API docs are at `/docs`. Docker: `docker build -t nimbus . && docker
 ## Architecture
 
 ```
-                     ┌─────────────── React SPA (Vite) ───────────────┐
+                     ┌────────── Next.js app (static export) ─────────┐
                      │  streaming chat · source cards · pipeline trace │
                      └────────────────────┬───────────────────────────┘
                                           │  SSE
@@ -55,7 +55,37 @@ question ─► condense (if follow-up) ─► expand ─► vector × N + BM25 
 | Embeddings | all-MiniLM-L6-v2 via Chroma's ONNX runtime | ~80 MB instead of a multi-GB torch install |
 | Generation | Llama 3 (Groq hosted, Ollama local) | Open weights, self-hostable for enterprise data |
 | API | FastAPI + SSE | Token streaming, per-session history, OpenAPI docs |
-| UI | React + Vite | Streaming answers, expandable sources, pipeline trace |
+| UI | Next.js (App Router, static export) | Glass design system, streaming answers, pipeline trace |
+
+The frontend is a static export, so one FastAPI process serves both the API and the UI on a
+single port. `npm run dev` instead runs Next on `:5173` and proxies `/api` to `:8000`.
+
+## Deploying
+
+The stack has two independent halves, and only the model half has real hosting cost.
+
+**Everything except the model is nearly free to host.** FastAPI plus a static Next export plus
+ChromaDB is one container with no external database. It fits the free or hobby tier of Render,
+Railway, Fly.io or Azure Container Apps. ChromaDB persists to disk, so mount a volume, or bake
+the index into the image as the Dockerfile already does. Rebuild the image when `data/` changes.
+
+**Ollama does not survive the move to a server unchanged.** Locally it is free because your own
+machine provides the RAM. On a host you are renting that RAM:
+
+| Option | What it costs | When it makes sense |
+|---|---|---|
+| Hosted Llama 3 API (Groq, Together, Fireworks) | Free tier or per-token | Default. No GPU to rent, no cold starts. Change one env var |
+| Ollama on a CPU VM | ~8 GB RAM instance, a few dollars a month | Llama 3 8B on CPU answers in roughly 10-30 s. Fine for a private demo, too slow for users |
+| Ollama on a GPU VM | Substantially more per month | Only when data genuinely cannot leave your infrastructure |
+| Ollama on free tiers | Not possible | Free tiers cap memory well below the ~5 GB the model needs |
+
+The backend abstraction is what makes this a configuration change rather than a rewrite. Deploy
+with `LLM_BACKEND=groq` and the container needs no GPU and about 512 MB of RAM. If the
+organisation later requires on-premise inference, point `OLLAMA_BASE_URL` at an Ollama box and
+nothing else changes.
+
+Set `GROQ_API_KEY` as a platform secret rather than shipping `.env`, and add your deployed
+origin to the CORS allowlist in `api/main.py` if the frontend is hosted separately.
 
 ## Retrieval
 
@@ -149,9 +179,9 @@ src/ingest.py      load → chunk → embed → persist (idempotent, --rebuild t
 src/llm.py         backend selection, fallbacks, health check
 src/rag.py         hybrid retrieval and grounded generation
 src/cli.py         terminal client
-src/app.py         Streamlit UI (alternative to the React one)
+src/app.py         Streamlit UI (alternative to the Next.js one)
 api/               FastAPI service, SSE streaming, session store
-frontend/          React + Vite single page app
+frontend/          Next.js app router, glass design system
 tests/             24 tests, LLM-dependent ones skip without a backend
 eval/              labelled retrieval benchmark
 ```

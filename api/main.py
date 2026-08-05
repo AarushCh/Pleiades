@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -27,7 +27,7 @@ from src.rag import SupportAssistant
 
 STATE: dict = {}
 SESSIONS = SessionStore()
-DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+DIST = Path(__file__).resolve().parent.parent / "frontend" / "out"
 
 
 @asynccontextmanager
@@ -181,11 +181,4 @@ def get_session(session_id: str) -> SessionResponse:
 
 
 if DIST.exists():
-    app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
-
-    @app.get("/{full_path:path}")
-    def spa(full_path: str) -> FileResponse:
-        candidate = DIST / full_path
-        if full_path and candidate.is_file():
-            return FileResponse(candidate)
-        return FileResponse(DIST / "index.html")
+    app.mount("/", StaticFiles(directory=DIST, html=True), name="ui")
