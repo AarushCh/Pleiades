@@ -11,8 +11,8 @@ frontend/.next/
 frontend/out/
 *.log
 Pleiades_summary.md
-Pleiades_Pitch.pptx
 Pleiades/
 *.db-journal
 *.db-wal
 *.db-shm
+*.pptx

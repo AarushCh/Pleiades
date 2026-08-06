@@ -12,7 +12,7 @@ frontend/.next/
 frontend/out/
 tests/
 Pleiades_summary.md
-Pleiades_Pitch.pptx
 *.db-journal
 *.db-wal
 *.db-shm
+*.pptx
