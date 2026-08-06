@@ -1,5 +1,6 @@
 .venv/
 chroma_db/
+*.db
 .env
 .git/
 .vscode/
@@ -10,6 +11,8 @@ frontend/node_modules/
 frontend/.next/
 frontend/out/
 tests/
-pleiades.db
 Pleiades_summary.md
 Pleiades_Pitch.pptx
+*.db-journal
+*.db-wal
+*.db-shm
