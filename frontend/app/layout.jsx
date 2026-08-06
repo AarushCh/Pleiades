@@ -4,6 +4,10 @@ import "./chat.css";
 export const metadata = {
   title: "Pleiades",
   description: "Retrieval-Augmented Generation over enterprise knowledge bases",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-icon.png",
+  },
 };
 
 export const viewport = {
