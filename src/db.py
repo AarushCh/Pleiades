@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     DateTime,
+    MetaData,
     ForeignKey,
     Integer,
     String,
@@ -12,6 +13,7 @@ from sqlalchemy import (
     UniqueConstraint,
     create_engine,
     func,
+    text,
     select,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
@@ -33,6 +35,7 @@ def database_url() -> str:
 URL = database_url()
 IS_SQLITE = URL.startswith("sqlite")
 IS_POOLED = "pooler." in URL or ":6543" in URL
+SCHEMA = None if IS_SQLITE else os.getenv("DB_SCHEMA", "pleiades")
 
 
 def _connect_args() -> dict:
@@ -60,7 +63,7 @@ def now() -> datetime:
 
 
 class Base(DeclarativeBase):
-    pass
+    metadata = MetaData(schema=SCHEMA)
 
 
 class User(Base):
@@ -121,6 +124,9 @@ class Document(Base):
 
 
 def init_db() -> None:
+    if SCHEMA:
+        with engine.begin() as conn:
+            conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{SCHEMA}"'))
     Base.metadata.create_all(engine)
 
 
@@ -160,6 +166,6 @@ if __name__ == "__main__":
     init_db()
     with SessionLocal() as s:
         n = seed_documents(s)
-    print(f"Schema ready on {URL.split('@')[-1]}")
+    print(f"Schema '{SCHEMA or 'main'}' ready on {URL.split('@')[-1]}")
     print(f"Documents synced: {n}")
     print(stats())

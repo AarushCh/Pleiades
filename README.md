@@ -77,6 +77,7 @@ Point Render at the repo and set four secrets:
 | Variable | Value |
 |---|---|
 | `DATABASE_URL` | Supabase connection string |
+| `DB_SCHEMA` | Postgres schema, defaults to `pleiades` |
 | `GROQ_API_KEY` | from console.groq.com/keys |
 | `JWT_SECRET` | generated automatically by `render.yaml` |
 | `CORS_ORIGINS` | your deployed origin, only if the UI is hosted separately |
