@@ -93,7 +93,13 @@ export default function Page() {
   }, [messages]);
 
   useEffect(() => {
+    const saved = localStorage.getItem("pleiades.theme");
+    if (saved === "light" || saved === "dark") setTheme(saved);
+  }, []);
+
+  useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    localStorage.setItem("pleiades.theme", theme);
   }, [theme]);
 
   const send = useCallback(
@@ -151,7 +157,13 @@ export default function Page() {
 
   const openConvo = async (id) => {
     abortRef.current?.abort();
-    const rows = await getConversation(id);
+    let rows;
+    try {
+      rows = await getConversation(id);
+    } catch {
+      refreshConvos();
+      return;
+    }
     setConvoId(id);
     setMessages(
       rows.map((m) =>
@@ -170,7 +182,8 @@ export default function Page() {
   };
 
   const removeConvo = async (id) => {
-    await deleteConversation(id);
+    if (!window.confirm("Delete this conversation?")) return;
+    await deleteConversation(id).catch(() => {});
     if (id === convoId) {
       setConvoId(null);
       setMessages([]);
@@ -237,6 +250,11 @@ export default function Page() {
         <section>
           <h2 className="side-h">Pipeline</h2>
           {healthError && <div className="alert">API unreachable — {healthError}</div>}
+          {health?.database === "fallback" && (
+            <div className="alert">
+              Demo mode: the main database is unreachable, so accounts reset when the server restarts.
+            </div>
+          )}
           {health && (
             <dl className="spec">
               <dt>Generation</dt>
@@ -276,7 +294,7 @@ export default function Page() {
         <div className="topbar">
           <div>
             <h2>Support conversation</h2>
-            <p>Grounded in five internal documents, with citations</p>
+            <p>Grounded in {health?.documents?.length ?? "the"} internal documents, with citations</p>
           </div>
           <span className="live">
             <span className={`live__dot ${healthError ? "live__dot--off" : ""}`} />

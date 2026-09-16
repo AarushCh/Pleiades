@@ -6,7 +6,6 @@
   padding: 16px;
 }
 
-/* ── sidebar ───────────────────────────────────────────────── */
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -114,7 +113,7 @@
 }
 
 .alert {
-  margin-top: 10px;
+  margin: 10px 0;
   padding: 10px 12px;
   font-size: 12px;
   line-height: 1.5;
@@ -124,7 +123,6 @@
   border-radius: 9px;
 }
 
-/* ── main ──────────────────────────────────────────────────── */
 .main {
   display: flex;
   flex-direction: column;
@@ -207,7 +205,6 @@
   border-radius: 9px;
 }
 
-/* ── welcome ───────────────────────────────────────────────── */
 .welcome {
   margin: auto;
   width: 100%;
@@ -250,7 +247,6 @@
   text-align: left;
 }
 
-/* ── turns ─────────────────────────────────────────────────── */
 .turn--user {
   display: flex;
   justify-content: flex-end;
@@ -347,17 +343,18 @@
 }
 
 @keyframes blink {
+
   0%,
   60%,
   100% {
     opacity: 0.22;
   }
+
   30% {
     opacity: 1;
   }
 }
 
-/* ── details panel ─────────────────────────────────────────── */
 .details {
   margin-top: 14px;
   border-radius: var(--r-md);
@@ -501,7 +498,6 @@
   border-radius: 20px;
 }
 
-/* ── pipeline trace ────────────────────────────────────────── */
 .trace {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
@@ -554,7 +550,6 @@
   margin-bottom: 4px;
 }
 
-/* ── composer ──────────────────────────────────────────────── */
 .composer {
   display: flex;
   gap: 11px;
@@ -588,9 +583,11 @@
     grid-template-columns: 1fr;
     padding: 10px;
   }
+
   .sidebar {
     display: none;
   }
+
   .thread,
   .composer {
     padding-left: 16px;
@@ -598,7 +595,6 @@
   }
 }
 
-/* ── auth ──────────────────────────────────────────────────── */
 .auth {
   display: grid;
   place-items: center;
@@ -653,7 +649,7 @@
   gap: 6px;
 }
 
-.field > span {
+.field>span {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -686,7 +682,6 @@
   margin-top: 4px;
 }
 
-/* ── conversation list ─────────────────────────────────────── */
 .convos {
   display: grid;
   gap: 4px;

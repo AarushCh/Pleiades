@@ -15,6 +15,11 @@ export function writeSession(session) {
   else localStorage.removeItem(KEY);
 }
 
+function expireSession() {
+  writeSession(null);
+  window.location.reload();
+}
+
 function authHeaders() {
   const s = readSession();
   return s?.token ? { Authorization: `Bearer ${s.token}` } : {};
@@ -30,6 +35,7 @@ async function jsonFetch(path, options = {}) {
     },
   });
   const body = await res.json().catch(() => ({}));
+  if (res.status === 401 && readSession()) expireSession();
   if (!res.ok) throw new Error(body.detail || `Request failed (${res.status})`);
   return body;
 }
@@ -63,8 +69,10 @@ export async function streamChat({
     signal,
   });
 
+  if (res.status === 401) return expireSession();
   if (!res.ok || !res.body) {
-    onError(res.status === 401 ? "Session expired, sign in again" : `Request failed (${res.status})`);
+    const body = await res.json().catch(() => ({}));
+    onError(res.status === 429 ? body.detail : `Request failed (${res.status})`);
     return;
   }
 

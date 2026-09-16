@@ -74,7 +74,6 @@ code {
   border-radius: 4px;
 }
 
-/* ── ambient scene ─────────────────────────────────────────── */
 .scene {
   position: fixed;
   inset: 0;
@@ -134,7 +133,6 @@ code {
   }
 }
 
-/* ── glass surface ─────────────────────────────────────────── */
 .glass {
   background: var(--glass);
   backdrop-filter: blur(var(--blur)) saturate(150%);
@@ -160,7 +158,6 @@ code {
   }
 }
 
-/* ── button style 3: horizontal fill sweep ─────────────────── */
 .btn3 {
   position: relative;
   z-index: 0;
@@ -236,7 +233,6 @@ code {
   cursor: not-allowed;
 }
 
-/* ── button style 12: split bar sweep ──────────────────────── */
 .btn12 {
   position: relative;
   z-index: 0;
