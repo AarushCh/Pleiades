@@ -54,6 +54,7 @@ def test_health_is_public(client):
     assert body["status"] == "ok"
     assert body["chunks"] > 0
     assert len(body["documents"]) == 5
+    assert client.head("/api/health").status_code == 200
 
 
 def test_endpoints_require_authentication(client):

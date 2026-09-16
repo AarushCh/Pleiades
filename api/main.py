@@ -88,7 +88,7 @@ def sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-@app.get("/api/health", response_model=HealthResponse)
+@app.api_route("/api/health", methods=["GET", "HEAD"], response_model=HealthResponse)
 def health() -> HealthResponse:
     b = bot()
     return HealthResponse(
