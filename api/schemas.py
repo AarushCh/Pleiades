@@ -37,6 +37,7 @@ class HealthResponse(BaseModel):
     top_k: int
     chunks: int
     documents: list[str]
+    database: str = "primary"
 
 
 class ConversationOut(BaseModel):

@@ -38,3 +38,22 @@ def test_embeddings_are_384_dimensional():
 
 def test_index_matches_source_documents(assistant):
     assert assistant.store._collection.count() == len(assistant.chunks)
+
+
+def test_unreachable_database_falls_back_to_sqlite():
+    import os
+    import subprocess
+    import sys
+
+    script = (
+        "from src.db import init_db, SessionLocal, User\n"
+        "from sqlalchemy import select, func\n"
+        "assert init_db() == 'fallback'\n"
+        "with SessionLocal() as s:\n"
+        "    print(s.scalar(select(func.count()).select_from(User)))\n"
+    )
+    env = {**os.environ, "DATABASE_URL": "postgresql://nobody:x@127.0.0.1:1/none", "JWT_SECRET": "t"}
+    run = subprocess.run([sys.executable, "-c", script], cwd=config.ROOT, env=env,
+                         capture_output=True, text=True, timeout=60)
+    assert run.returncode == 0, run.stderr
+    assert run.stdout.strip().isdigit()

@@ -159,8 +159,10 @@ class SupportAssistant:
         lines = [ln.strip(" -*\t") for ln in raw.splitlines() if ln.strip()]
         return [ln for ln in lines if 3 < len(ln) < 160][:3]
 
-    def retrieve(self, question: str, history: list[tuple[str, str]] | None = None) -> Retrieval:
+    def retrieve(self, question: str, history: list[tuple[str, str]] | None = None,
+                 top_k: int | None = None) -> Retrieval:
         history = self.history if history is None else history
+        top_k = top_k or self.top_k
         condensed = self._needs_condensing(question, history)
         query = question
         if condensed:
@@ -169,7 +171,7 @@ class SupportAssistant:
                 "question": question,
             }).strip() or question
 
-        pool = self.top_k * 2
+        pool = top_k * 2
         primary = self._vector(question, pool)
         base = [primary] + ([self._vector(query, pool)] if condensed else [])
         best = max((h[0][1] for h in base if h), default=0.0)
@@ -190,12 +192,12 @@ class SupportAssistant:
 
         anchors = [
             doc.metadata["hash"]
-            for doc, sim in primary[:min(config.ANCHORS, self.top_k)]
+            for doc, sim in primary[:min(config.ANCHORS, top_k)]
             if sim >= config.MIN_RELEVANCE
         ]
         top = list(dict.fromkeys(anchors))
         for h in sorted(fused, key=lambda h: -fused[h]):
-            if len(top) >= self.top_k:
+            if len(top) >= top_k:
                 break
             if h not in top:
                 top.append(h)

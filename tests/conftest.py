@@ -8,12 +8,18 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src import config
-from src.llm import resolve_backend
+from src.llm import get_llm, resolve_backend
 
 
 @pytest.fixture(scope="session")
 def has_llm() -> bool:
-    return resolve_backend() != "stub"
+    if resolve_backend() == "stub":
+        return False
+    try:
+        get_llm()[0].invoke("Reply with exactly: OK")
+        return True
+    except Exception:
+        return False
 
 
 @pytest.fixture(scope="session")

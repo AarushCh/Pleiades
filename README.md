@@ -55,7 +55,7 @@ question ─► condense (if follow-up) ─► expand ─► vector × N + BM25 
 | Orchestration | LangChain (LCEL) | Composable chains, swappable model backends |
 | Vector store | ChromaDB, cosine, persisted | Zero-config, embedded, no server |
 | Embeddings | all-MiniLM-L6-v2 via Chroma's ONNX runtime | ~80 MB instead of a multi-GB torch install |
-| Generation | Llama 3 (Groq hosted, Ollama local) | Open weights, self-hostable for enterprise data |
+| Generation | Llama 3 (any OpenAI-compatible host, Ollama local) | Open weights, self-hostable for enterprise data |
 | API | FastAPI + SSE | Token streaming, per-session history, OpenAPI docs |
 | UI | Next.js (App Router, static export) | Glass design system, streaming answers, pipeline trace |
 
@@ -183,12 +183,13 @@ Query expansion adds one small call (~360 tokens of section headings in, ~40 out
 
 ## Backends and failover
 
-Auto-detected in order: Ollama → Groq → OpenRouter → extractive stub. Override with
+Auto-detected in order: Ollama → Llama API → Groq → OpenRouter → extractive stub. Override with
 `LLM_BACKEND` in `.env`.
 
 | Backend | Setup | Notes |
 |---|---|---|
-| `groq` | `GROQ_API_KEY=gsk_…` from [console.groq.com/keys](https://console.groq.com/keys) | Llama 3.3 70B, ~0.7 s per answer. Current default. Free tier is capped at 100k tokens/day |
+| `llama-api` | `LLAMA_API_BASE`, `LLAMA_API_KEY`, `LLAMA_API_MODEL` | Any OpenAI-compatible host serving Llama 3 (Cerebras, SambaNova, NVIDIA, Together, a self-hosted vLLM). Recommended hosted default |
+| `groq` | `GROQ_API_KEY=gsk_…` | Groq has retired its Llama 3 chat models; set `GROQ_MODEL` to a model your key lists, or leave Groq as a fallback only |
 | `ollama` | `.\setup.ps1 -WithOllama` | Local Llama 3 8B, fully offline. ~7 s per answer and visibly weaker than 70B |
 | `openrouter` | `OPENROUTER_API_KEY=sk-or-v1-…` | Free Nemotron model by default; Llama 3.3 there needs credit on the key |
 | `stub` | nothing | Extractive fallback so retrieval still demos with no model at all |
@@ -214,7 +215,7 @@ src/cli.py         terminal client
 src/app.py         Streamlit UI (alternative to the Next.js one)
 api/               FastAPI service, SSE streaming, session store
 frontend/          Next.js app router, glass design system
-tests/             24 tests, LLM-dependent ones skip without a backend
+tests/             30 tests, LLM-dependent ones skip unless a backend answers
 eval/              labelled retrieval benchmark
 ```
 

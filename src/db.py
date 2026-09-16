@@ -16,6 +16,7 @@ from sqlalchemy import (
     text,
     select,
 )
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
 from src import config
@@ -123,11 +124,23 @@ class Document(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
 
 
-def init_db() -> None:
-    if SCHEMA:
-        with engine.begin() as conn:
-            conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{SCHEMA}"'))
-    Base.metadata.create_all(engine)
+def init_db() -> str:
+    try:
+        if SCHEMA:
+            with engine.begin() as conn:
+                conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{SCHEMA}"'))
+        Base.metadata.create_all(engine)
+        return "primary"
+    except OperationalError:
+        if IS_SQLITE:
+            raise
+    fallback = create_engine(
+        f"sqlite:///{config.ROOT / 'pleiades.db'}",
+        connect_args={"check_same_thread": False},
+    ).execution_options(schema_translate_map={SCHEMA: None})
+    SessionLocal.configure(bind=fallback)
+    Base.metadata.create_all(fallback)
+    return "fallback"
 
 
 def seed_documents(session: Session) -> int:

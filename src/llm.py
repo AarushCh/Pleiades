@@ -17,7 +17,9 @@ class ExtractiveStubLLM(LLM):
         return "extractive-stub"
 
     def _call(self, prompt: str, stop: Any = None, **kwargs: Any) -> str:
-        context = _between(prompt, "<context>", "</context>")
+        if "<context>" not in prompt:
+            return ""
+        context = re.sub(r"^\[Source:.*$", "", _between(prompt, "<context>", "</context>"), flags=re.M)
         question = _between(prompt, "<question>", "</question>")
         if not context.strip():
             return "I don't have anything in the knowledge base that covers that."
@@ -34,7 +36,7 @@ class ExtractiveStubLLM(LLM):
         if not best:
             return "I don't have anything in the knowledge base that covers that."
 
-        return ("[extractive fallback - no LLM configured]\n\n"
+        return ("[extractive answer - language model unavailable]\n\n"
                 + "\n\n".join(f"- {s}" for s in best))
 
 
@@ -52,22 +54,12 @@ def ollama_available() -> bool:
         return False
 
 
-def resolve_backend() -> str:
-    if config.LLM_BACKEND != "auto":
-        return config.LLM_BACKEND
-    if ollama_available():
-        return "ollama"
-    if config.GROQ_API_KEY:
-        return "groq"
-    if config.OPENROUTER_API_KEY:
-        return "openrouter"
-    return "stub"
-
-
 def available_backends() -> list[str]:
     order = []
     if ollama_available():
         order.append("ollama")
+    if config.LLAMA_API_BASE and config.LLAMA_API_KEY:
+        order.append("llama-api")
     if config.GROQ_API_KEY:
         order.append("groq")
     if config.OPENROUTER_API_KEY:
@@ -75,20 +67,29 @@ def available_backends() -> list[str]:
     return order
 
 
-def get_llm_with_fallbacks() -> tuple[BaseLanguageModel, str, list[str]]:
-    primary, name = get_llm()
-    spares = [b for b in available_backends() if b != resolve_backend()]
+def resolve_backend() -> str:
+    if config.LLM_BACKEND != "auto":
+        return config.LLM_BACKEND
+    return next(iter(available_backends()), "stub")
 
-    models = []
-    for backend in spares:
+
+def get_llm_with_fallbacks() -> tuple[BaseLanguageModel, str, list[str]]:
+    chosen = resolve_backend()
+    primary, name = build_llm(chosen)
+    if chosen == "stub":
+        return primary, name, []
+
+    spares, models = [], []
+    for backend in available_backends():
+        if backend == chosen:
+            continue
         try:
             models.append(build_llm(backend)[0])
+            spares.append(backend)
         except Exception:
             continue
-
-    if not models:
-        return primary, name, []
-    return primary.with_fallbacks(models), name, spares
+    models.append(ExtractiveStubLLM())
+    return primary.with_fallbacks(models), name, spares + ["stub"]
 
 
 def get_llm() -> tuple[BaseLanguageModel, str]:
@@ -108,6 +109,24 @@ def build_llm(backend: str) -> tuple[BaseLanguageModel, str]:
             f"Ollama · {config.OLLAMA_MODEL} (local)",
         )
 
+    if backend == "llama-api":
+        if not (config.LLAMA_API_BASE and config.LLAMA_API_KEY):
+            raise SystemExit("LLM_BACKEND=llama-api needs LLAMA_API_BASE and LLAMA_API_KEY")
+        from urllib.parse import urlparse
+        from langchain_openai import ChatOpenAI
+        return (
+            ChatOpenAI(
+                model=config.LLAMA_API_MODEL,
+                api_key=config.LLAMA_API_KEY,
+                base_url=config.LLAMA_API_BASE,
+                temperature=config.TEMPERATURE,
+                max_tokens=config.MAX_TOKENS,
+                timeout=config.LLM_TIMEOUT,
+                max_retries=1,
+            ),
+            f"{urlparse(config.LLAMA_API_BASE).netloc} · {config.LLAMA_API_MODEL}",
+        )
+
     if backend == "groq":
         if not config.GROQ_API_KEY:
             raise SystemExit("LLM_BACKEND=groq but GROQ_API_KEY is not set")
@@ -118,6 +137,8 @@ def build_llm(backend: str) -> tuple[BaseLanguageModel, str]:
                 api_key=config.GROQ_API_KEY,
                 temperature=config.TEMPERATURE,
                 max_tokens=config.MAX_TOKENS,
+                timeout=config.LLM_TIMEOUT,
+                max_retries=1,
             ),
             f"Groq · {config.GROQ_MODEL}",
         )
@@ -133,6 +154,8 @@ def build_llm(backend: str) -> tuple[BaseLanguageModel, str]:
                 base_url=config.OPENROUTER_BASE_URL,
                 temperature=config.TEMPERATURE,
                 max_tokens=config.MAX_TOKENS,
+                timeout=config.LLM_TIMEOUT,
+                max_retries=1,
             ),
             f"OpenRouter · {config.OPENROUTER_MODEL}",
         )
@@ -164,6 +187,7 @@ def _main() -> None:
         print(f"\nTest call FAILED: {exc}\n")
         endpoints = {
             "groq": (config.GROQ_API_KEY, "https://api.groq.com/openai/v1/models", "GROQ_MODEL"),
+            "llama-api": (config.LLAMA_API_KEY, f"{config.LLAMA_API_BASE}/models", "LLAMA_API_MODEL"),
             "openrouter": (config.OPENROUTER_API_KEY,
                            f"{config.OPENROUTER_BASE_URL}/models", "OPENROUTER_MODEL"),
         }

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -8,9 +7,15 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 import jwt
 
-SECRET = os.getenv("JWT_SECRET") or secrets.token_urlsafe(32)
+from src import config
+
+SECRET = config.JWT_SECRET
+if not SECRET:
+    if config.DATABASE_URL:
+        raise RuntimeError("JWT_SECRET must be set when DATABASE_URL is configured")
+    SECRET = secrets.token_urlsafe(32)
 ALGORITHM = "HS256"
-TOKEN_DAYS = int(os.getenv("TOKEN_DAYS", "7"))
+TOKEN_DAYS = config.TOKEN_DAYS
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
 

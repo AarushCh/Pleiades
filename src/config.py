@@ -22,15 +22,27 @@ EXPAND_THRESHOLD = float(os.getenv("EXPAND_THRESHOLD", "0.75"))
 KEYWORD_BONUS = 0.06
 ANCHORS = 4
 
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+JWT_SECRET = os.getenv("JWT_SECRET", "").strip()
+TOKEN_DAYS = int(os.getenv("TOKEN_DAYS", "7"))
+ADMIN_EMAILS = {e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()}
+CORS_ORIGINS = [o for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o]
+TRUST_PROXY = os.getenv("TRUST_PROXY", "").strip().lower() in {"1", "true", "yes"}
+
 LLM_BACKEND = os.getenv("LLM_BACKEND", "auto").lower()
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.1"))
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "500"))
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "30"))
 
 HISTORY_TURNS = 2
 HISTORY_REPLY_CHARS = 220
 
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+LLAMA_API_BASE = os.getenv("LLAMA_API_BASE", "").strip().rstrip("/")
+LLAMA_API_KEY = os.getenv("LLAMA_API_KEY", "").strip()
+LLAMA_API_MODEL = os.getenv("LLAMA_API_MODEL", "llama-3.3-70b")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")

@@ -7,7 +7,13 @@ services:
     healthCheckPath: /api/health
     envVars:
       - key: LLM_BACKEND
-        value: groq
+        value: auto
+      - key: LLAMA_API_BASE
+        sync: false
+      - key: LLAMA_API_KEY
+        sync: false
+      - key: LLAMA_API_MODEL
+        sync: false
       - key: GROQ_API_KEY
         sync: false
       - key: DATABASE_URL
@@ -16,3 +22,7 @@ services:
         generateValue: true
       - key: CORS_ORIGINS
         sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: TRUST_PROXY
+        value: "1"

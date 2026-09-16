@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.deps import current_user, get_db
+from api.deps import client_ip, current_user, get_db, rate_limit
 from src.auth import create_token, hash_password, validate_credentials, verify_password
 from src.db import User
 
@@ -31,7 +31,8 @@ class AuthResponse(BaseModel):
 
 
 @router.post("/signup", response_model=AuthResponse)
-def signup(req: SignupRequest, db: Session = Depends(get_db)) -> AuthResponse:
+def signup(req: SignupRequest, request: Request, db: Session = Depends(get_db)) -> AuthResponse:
+    rate_limit(f"signup:{client_ip(request)}", 10, 900)
     email = req.email.strip().lower()
     problem = validate_credentials(email, req.password)
     if problem:
@@ -50,8 +51,10 @@ def signup(req: SignupRequest, db: Session = Depends(get_db)) -> AuthResponse:
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(req: LoginRequest, db: Session = Depends(get_db)) -> AuthResponse:
+def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)) -> AuthResponse:
     email = req.email.strip().lower()
+    rate_limit(f"login:{client_ip(request)}", 10, 300)
+    rate_limit(f"login:{email}", 10, 300)
     user = db.scalar(select(User).where(User.email == email))
     if user is None or not verify_password(req.password, user.password_hash):
         raise HTTPException(401, "Email or password is incorrect")

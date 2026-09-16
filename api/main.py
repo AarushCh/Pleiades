@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import sys
 import time
 from contextlib import asynccontextmanager
@@ -28,17 +27,18 @@ from api.schemas import (
     SearchResponse,
 )
 from src import config
-from src.db import Conversation, Message, SessionLocal, User, init_db, seed_documents
+from src.db import Conversation, Message, SessionLocal, User, init_db, now, seed_documents
 from src.rag import SupportAssistant
 
 STATE: dict = {}
 DIST = Path(__file__).resolve().parent.parent / "frontend" / "out"
-ORIGINS = [o for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o]
+ORIGINS = config.CORS_ORIGINS
+ADMINS = config.ADMIN_EMAILS
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    init_db()
+    STATE["database"] = await asyncio.to_thread(init_db)
     if not config.CHROMA_DIR.exists():
         raise RuntimeError("No vector index. Run: python -m src.ingest")
     STATE["bot"] = await asyncio.to_thread(SupportAssistant)
@@ -62,6 +62,20 @@ app.add_middleware(
 
 app.include_router(auth_router)
 
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+}
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.update(SECURITY_HEADERS)
+    return response
+
 
 def bot() -> SupportAssistant:
     instance = STATE.get("bot")
@@ -84,6 +98,7 @@ def health() -> HealthResponse:
         top_k=b.top_k,
         chunks=len(b.chunks),
         documents=list(config.SOURCE_LABELS.values()),
+        database=STATE.get("database", "primary"),
     )
 
 
@@ -91,13 +106,7 @@ def health() -> HealthResponse:
 async def search(req: SearchRequest, _: User = Depends(current_user)) -> SearchResponse:
     b = bot()
     start = time.perf_counter()
-    original = b.top_k
-    if req.top_k:
-        b.top_k = req.top_k
-    try:
-        r = await asyncio.to_thread(b.retrieve, req.query, [])
-    finally:
-        b.top_k = original
+    r = await asyncio.to_thread(b.retrieve, req.query, [], req.top_k)
     return SearchResponse(
         query=r.query,
         expansions=r.expansions,
@@ -209,6 +218,7 @@ async def chat(
                     ))
                     if is_first:
                         convo_row.title = question[:80]
+                    convo_row.updated_at = now()
                     write.commit()
 
         yield sse("done", {"total_ms": elapsed, "conversation_id": convo_id})
@@ -269,6 +279,8 @@ def delete_conversation(
 
 @app.post("/api/admin/reseed")
 def reseed(user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    if user.email not in ADMINS:
+        raise HTTPException(403, "Admin access required")
     return {"synced": seed_documents(db)}
 
 
