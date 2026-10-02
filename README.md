@@ -26,7 +26,7 @@ The demo tenant is **Nimbus Networks**, a fictional ISP.
 | `.\run.ps1 dev` | API with reload on `:8000`, Next dev server on `:5173` |
 | `.\run.ps1 demo` | Scripted five-question walkthrough in the terminal |
 | `.\run.ps1 cli` | Interactive terminal client |
-| `.\run.ps1 test` | pytest suite (24 tests) |
+| `.\run.ps1 test` | pytest suite (33 tests) |
 | `.\run.ps1 eval` | Retrieval recall benchmark |
 | `.\run.ps1 backend` | Reports which model is live and makes a test call |
 
@@ -215,7 +215,8 @@ src/cli.py         terminal client
 src/app.py         Streamlit UI (alternative to the Next.js one)
 api/               FastAPI service, SSE streaming, session store
 frontend/          Next.js app router, glass design system
-tests/             30 tests, LLM-dependent ones skip unless a backend answers
+tests/             33 tests, LLM-dependent ones skip unless a backend answers
+training/          project assistant: corpus, dataset, QLoRA fine-tune, evaluation
 eval/              labelled retrieval benchmark
 ```
 
@@ -237,3 +238,18 @@ re-run `python -m src.ingest`. Only new chunks are embedded.
    credit, combining the billing FAQ with the SLA table in the catalog.
 5. **Refusal** — an out-of-scope question returns a one-line refusal and a human handoff
    instead of answering from the model's own knowledge.
+
+## Project assistant
+
+The same pipeline can answer questions about this repository itself: code, data, decisions,
+deployment and roadmap.
+
+| Command | What it does |
+|---|---|
+| `python training/pipeline.py build` | Collect the project corpus and index it |
+| `python training/pipeline.py chat` | Ask in the terminal |
+| `python training/pipeline.py serve` | Web UI on `:8100` |
+| `python training/pipeline.py eval --answers` | Score on the golden set |
+| `python training/pipeline.py dataset` | Generate verified fine-tuning data |
+
+`training/finetune.py` runs QLoRA on Llama 3.1 8B on a GPU and exports a GGUF for Ollama.
