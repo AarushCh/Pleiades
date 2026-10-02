@@ -12,6 +12,9 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin pleiades
+ENV HOME=/home/pleiades
+
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -21,7 +24,9 @@ COPY data/ ./data/
 COPY eval/ ./eval/
 COPY --from=ui /ui/out ./frontend/out
 
-RUN python -m src.ingest
+RUN python -m src.ingest && chown -R pleiades:pleiades /app /home/pleiades
+
+USER pleiades
 
 ENV PORT=8000
 EXPOSE 8000
