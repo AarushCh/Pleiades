@@ -23,6 +23,8 @@ MIN_RELEVANCE = float(os.getenv("MIN_RELEVANCE", "0.12"))
 EXPAND_THRESHOLD = float(os.getenv("EXPAND_THRESHOLD", "0.75"))
 KEYWORD_BONUS = 0.06
 ANCHORS = 4
+FUSION = os.getenv("FUSION", "anchored").strip().lower()
+RRF_K = int(os.getenv("RRF_K", "60"))
 
 DEFAULT_TENANT = os.getenv("DEFAULT_TENANT", "nimbus").strip().lower()
 DEFAULT_TENANT_NAME = os.getenv("DEFAULT_TENANT_NAME", "Nimbus Networks").strip()

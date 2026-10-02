@@ -26,7 +26,7 @@ The demo tenant is **Nimbus Networks**, a fictional ISP.
 | `.\run.ps1 dev` | API with reload on `:8000`, Next dev server on `:5173` |
 | `.\run.ps1 demo` | Scripted five-question walkthrough in the terminal |
 | `.\run.ps1 cli` | Interactive terminal client |
-| `.\run.ps1 test` | pytest suite (46 tests) |
+| `.\run.ps1 test` | pytest suite (48 tests) |
 | `.\run.ps1 eval` | Retrieval recall benchmark |
 | `.\run.ps1 backend` | Reports which model is live and makes a test call |
 
@@ -161,8 +161,13 @@ So retrieval runs several ways and fuses them:
    anchoring, a strong expansion match displaced correct chunks and expansion made three
    benchmark cases worse.
 
-Reciprocal Rank Fusion was tried first and performed worse here: with four candidate lists it
-spread rank mass across near-duplicates and pushed decisive chunks out of the top 5.
+Reciprocal Rank Fusion (Cormack et al., k=60) is implemented and can be switched on with
+`FUSION=rrf`. On vector plus BM25 it scores 73.3% against anchored fusion's 80.0%. It gives the
+keyword list an equal vote, and for *"my RMA has been stuck"* that vote goes to every chunk that
+mentions an RMA, which pushes the escalation section out of the top 6. Keeping the original
+question's top hits fixes that, so anchored fusion stays the default. Fifteen questions is a
+small set, one question moves recall by 6.7 points, and the comparison will be rerun on the
+larger eval set.
 
 Follow-ups are condensed against chat history, but the **original** question is always
 retrieved alongside the condensed one. Condensing alone silently dropped "4 days" from *"my
@@ -233,7 +238,7 @@ src/cli.py         terminal client
 src/app.py         Streamlit UI (alternative to the Next.js one)
 api/               FastAPI service, SSE streaming, session store
 frontend/          Next.js app router, glass design system
-tests/             46 tests, LLM-dependent ones skip unless a backend answers
+tests/             48 tests, LLM-dependent ones skip unless a backend answers
 training/          project assistant: corpus, dataset, QLoRA fine-tune, evaluation
 eval/              labelled retrieval benchmark
 ```

@@ -104,6 +104,14 @@ class Retrieval:
     expansions: list[str]
 
 
+def rrf(ranked_lists: list[list[str]], k: int = 60) -> dict[str, float]:
+    scores: dict[str, float] = {}
+    for ranked in ranked_lists:
+        for rank, key in enumerate(dict.fromkeys(ranked), 1):
+            scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank)
+    return scores
+
+
 @dataclass
 class SupportAssistant:
     tenant: str = config.DEFAULT_TENANT
@@ -188,17 +196,24 @@ class SupportAssistant:
         if self.has_llm and best < config.EXPAND_THRESHOLD:
             expansions = self._expand(query)
 
+        vector_lists = base + [self._vector(q, pool) for q in expansions]
+        keyword = [d.metadata["hash"] for d in self._keyword(question, pool)]
         sims: dict[str, float] = {}
-        for hits in base + [self._vector(q, pool) for q in expansions]:
+        for hits in vector_lists:
             for doc, sim in hits:
                 h = doc.metadata["hash"]
                 sims[h] = max(sims.get(h, 0.0), sim)
 
-        fused = {h: s for h, s in sims.items() if s >= config.MIN_RELEVANCE}
-        for h in (d.metadata["hash"] for d in self._keyword(question, pool)):
-            fused[h] = fused.get(h, 0.0) + config.KEYWORD_BONUS
+        if config.FUSION == "rrf":
+            ranked = [[d.metadata["hash"] for d, s in hits if s >= config.MIN_RELEVANCE]
+                      for hits in vector_lists]
+            fused = rrf(ranked + [keyword], config.RRF_K)
+        else:
+            fused = {h: s for h, s in sims.items() if s >= config.MIN_RELEVANCE}
+            for h in keyword:
+                fused[h] = fused.get(h, 0.0) + config.KEYWORD_BONUS
 
-        anchors = [
+        anchors = [] if config.FUSION == "rrf" else [
             doc.metadata["hash"]
             for doc, sim in primary[:min(config.ANCHORS, top_k)]
             if sim >= config.MIN_RELEVANCE

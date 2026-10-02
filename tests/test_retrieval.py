@@ -104,3 +104,18 @@ def test_an_empty_expansion_is_recorded_not_swallowed(assistant, monkeypatch):
     assistant.last_error = None
     assert assistant._expand("anything at all") == []
     assert assistant.last_error is not None
+
+
+def test_rrf_rewards_agreement_across_lists():
+    from src.rag import rrf
+
+    scores = rrf([["a", "b", "c"], ["b", "a"], ["b"]], k=60)
+    assert max(scores, key=scores.get) == "b"
+    assert scores["a"] == 1 / 61 + 1 / 62
+    assert scores["c"] < scores["a"]
+
+
+def test_rrf_counts_a_repeated_item_once_per_list():
+    from src.rag import rrf
+
+    assert rrf([["a", "a", "b"]], k=60) == {"a": 1 / 61, "b": 1 / 62}
