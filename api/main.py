@@ -28,6 +28,7 @@ from api.schemas import (
 )
 from src import config
 from src.db import Conversation, Message, SessionLocal, Tenant, User, init_db, now, seed_documents
+from src.ingest import build_index
 from src.rag import SupportAssistant
 
 STATE: dict = {}
@@ -292,10 +293,15 @@ def delete_conversation(
 
 
 @app.post("/api/admin/reseed")
-def reseed(user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
+async def reseed(user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
     if user.email not in ADMINS:
         raise HTTPException(403, "Admin access required")
-    return {"synced": seed_documents(db, user.tenant_id)}
+    synced = seed_documents(db, user.tenant_id)
+    slug = tenant_slug(db, user)
+    await asyncio.to_thread(build_index, slug, True)
+    fresh = await asyncio.to_thread(SupportAssistant, slug)
+    STATE["bots"][slug] = fresh
+    return {"synced": synced, "chunks": len(fresh.chunks)}
 
 
 if DIST.exists():

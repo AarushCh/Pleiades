@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
+from src import config
 from src.auth import create_token, hash_password, validate_credentials, verify_password
 
 
@@ -173,3 +174,24 @@ def test_conversation_delete(client, account):
     target = convos[0]["id"]
     assert client.delete(f"/api/conversations/{target}", headers=account["headers"]).status_code == 200
     assert client.get(f"/api/conversations/{target}", headers=account["headers"]).status_code == 404
+
+
+def test_reseed_requires_an_admin(client, account):
+    res = client.post("/api/admin/reseed", headers=account["headers"])
+    assert res.status_code == 403
+
+
+def test_reseed_rebuilds_the_live_assistant(client, account, monkeypatch):
+    import api.main as main
+
+    monkeypatch.setattr(main, "ADMINS", {account["email"]})
+    before = main.STATE["bots"][config.DEFAULT_TENANT]
+
+    res = client.post("/api/admin/reseed", headers=account["headers"])
+    assert res.status_code == 200, res.text
+
+    body = res.json()
+    assert body["chunks"] > 0
+    after = main.STATE["bots"][config.DEFAULT_TENANT]
+    assert after is not before
+    assert len(after.chunks) == body["chunks"]
