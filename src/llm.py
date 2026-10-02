@@ -113,6 +113,7 @@ def build_llm(backend: str) -> tuple[BaseLanguageModel, str]:
         if not (config.LLAMA_API_BASE and config.LLAMA_API_KEY):
             raise SystemExit("LLM_BACKEND=llama-api needs LLAMA_API_BASE and LLAMA_API_KEY")
         from urllib.parse import urlparse
+
         from langchain_openai import ChatOpenAI
         return (
             ChatOpenAI(

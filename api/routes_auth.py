@@ -44,7 +44,7 @@ def signup(req: SignupRequest, request: Request, db: Session = Depends(get_db)) 
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(409, "An account with that email already exists")
+        raise HTTPException(409, "An account with that email already exists") from None
 
     db.refresh(user)
     return AuthResponse(token=create_token(user.id, user.email), name=user.name, email=user.email)

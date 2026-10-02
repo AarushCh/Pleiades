@@ -6,7 +6,7 @@ import random
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -162,7 +162,7 @@ def cmd_build(_):
         redacted += n
         (CORPUS / name).write_text(body, encoding="utf-8")
         manifest.append({"file": name, "chars": len(body), "sha256": hashlib.sha256(body.encode()).hexdigest()})
-    (BUILD / "manifest.json").write_text(json.dumps({"built": datetime.now(timezone.utc).isoformat(),
+    (BUILD / "manifest.json").write_text(json.dumps({"built": datetime.now(UTC).isoformat(),
                                                      "files": manifest}, indent=2), encoding="utf-8")
     print(f"Corpus: {len(docs)} documents, {sum(m['chars'] for m in manifest):,} characters, {redacted} secrets redacted")
     from src.ingest import build_index

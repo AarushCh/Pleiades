@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import jwt
@@ -45,8 +45,8 @@ def create_token(user_id: int, email: str) -> str:
     payload = {
         "sub": str(user_id),
         "email": email,
-        "iat": datetime.now(timezone.utc),
-        "exp": datetime.now(timezone.utc) + timedelta(days=TOKEN_DAYS),
+        "iat": datetime.now(UTC),
+        "exp": datetime.now(UTC) + timedelta(days=TOKEN_DAYS),
     }
     return jwt.encode(payload, SECRET, algorithm=ALGORITHM)
 

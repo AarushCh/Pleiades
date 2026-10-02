@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator
 
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
@@ -234,7 +234,7 @@ class SupportAssistant:
 
     def sources(self, r: Retrieval) -> list[dict]:
         seen, out = set(), []
-        for doc, score in zip(r.docs, r.scores):
+        for doc, score in zip(r.docs, r.scores, strict=True):
             label = doc.metadata.get("source_label", doc.metadata.get("filename", "unknown"))
             section = doc.metadata.get("section") or doc.metadata.get("doc_title") or ""
             if (label, section) in seen:
