@@ -37,6 +37,8 @@ URL = database_url()
 IS_SQLITE = URL.startswith("sqlite")
 IS_POOLED = "pooler." in URL or ":6543" in URL
 SCHEMA = None if IS_SQLITE else os.getenv("DB_SCHEMA", "pleiades")
+RLS = os.getenv("DB_RLS", "").strip().lower() in {"1", "true", "yes"} and not IS_SQLITE
+TENANT_TABLES = ("users", "conversations", "messages", "documents")
 
 
 def _connect_args() -> dict:
@@ -67,11 +69,26 @@ class Base(DeclarativeBase):
     metadata = MetaData(schema=SCHEMA)
 
 
-class User(Base):
-    __tablename__ = "users"
+class Tenant(Base):
+    __tablename__ = "tenants"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    slug: Mapped[str] = mapped_column(String(63), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+def _tenant_fk() -> Mapped[int]:
+    return mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+
+
+class User(Base):
+    __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("tenant_id", "email"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = _tenant_fk()
+    email: Mapped[str] = mapped_column(String(320), index=True)
     name: Mapped[str] = mapped_column(String(120))
     password_hash: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
@@ -85,6 +102,7 @@ class Conversation(Base):
     __tablename__ = "conversations"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = _tenant_fk()
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     title: Mapped[str] = mapped_column(String(200), default="New conversation")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
@@ -100,6 +118,7 @@ class Message(Base):
     __tablename__ = "messages"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = _tenant_fk()
     conversation_id: Mapped[int] = mapped_column(
         ForeignKey("conversations.id", ondelete="CASCADE"), index=True
     )
@@ -115,13 +134,44 @@ class Message(Base):
 
 class Document(Base):
     __tablename__ = "documents"
-    __table_args__ = (UniqueConstraint("filename"),)
+    __table_args__ = (UniqueConstraint("tenant_id", "filename"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = _tenant_fk()
     filename: Mapped[str] = mapped_column(String(200), index=True)
     label: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+def ensure_tenant(session: Session, slug: str, name: str | None = None) -> Tenant:
+    slug = slug.strip().lower()
+    row = session.scalar(select(Tenant).where(Tenant.slug == slug))
+    if row is None:
+        row = Tenant(slug=slug, name=name or slug.replace("-", " ").title())
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+    return row
+
+
+def apply_rls(bind) -> None:
+    qualified = f'"{SCHEMA}".' if SCHEMA else ""
+    with bind.begin() as conn:
+        for table in TENANT_TABLES:
+            conn.execute(text(f"ALTER TABLE {qualified}\"{table}\" ENABLE ROW LEVEL SECURITY"))
+            conn.execute(text(f"ALTER TABLE {qualified}\"{table}\" FORCE ROW LEVEL SECURITY"))
+            conn.execute(text(f'DROP POLICY IF EXISTS tenant_isolation ON {qualified}"{table}"'))
+            conn.execute(text(
+                f'CREATE POLICY tenant_isolation ON {qualified}"{table}" USING '
+                "(tenant_id = current_setting('app.tenant_id', true)::int) WITH CHECK "
+                "(tenant_id = current_setting('app.tenant_id', true)::int)"))
+
+
+def scope_to_tenant(session: Session, tenant_id: int) -> None:
+    if RLS:
+        session.execute(text("SELECT set_config('app.tenant_id', :t, true)"),
+                        {"t": str(tenant_id)})
 
 
 def init_db() -> str:
@@ -130,6 +180,10 @@ def init_db() -> str:
             with engine.begin() as conn:
                 conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{SCHEMA}"'))
         Base.metadata.create_all(engine)
+        if RLS:
+            apply_rls(engine)
+        with SessionLocal() as session:
+            ensure_tenant(session, config.DEFAULT_TENANT, config.DEFAULT_TENANT_NAME)
         return "primary"
     except OperationalError:
         if IS_SQLITE:
@@ -140,17 +194,22 @@ def init_db() -> str:
     ).execution_options(schema_translate_map={SCHEMA: None})
     SessionLocal.configure(bind=fallback)
     Base.metadata.create_all(fallback)
+    with SessionLocal() as session:
+        ensure_tenant(session, config.DEFAULT_TENANT, config.DEFAULT_TENANT_NAME)
     return "fallback"
 
 
-def seed_documents(session: Session) -> int:
+def seed_documents(session: Session, tenant_id: int | None = None) -> int:
+    if tenant_id is None:
+        tenant_id = ensure_tenant(session, config.DEFAULT_TENANT, config.DEFAULT_TENANT_NAME).id
     written = 0
     for path in sorted(config.DATA_DIR.glob("**/*.md")):
         body = path.read_text(encoding="utf-8")
         label = config.SOURCE_LABELS.get(path.name, path.name)
-        row = session.scalar(select(Document).where(Document.filename == path.name))
+        row = session.scalar(select(Document).where(
+            Document.tenant_id == tenant_id, Document.filename == path.name))
         if row is None:
-            session.add(Document(filename=path.name, label=label, body=body))
+            session.add(Document(tenant_id=tenant_id, filename=path.name, label=label, body=body))
             written += 1
         elif row.body != body or row.label != label:
             row.body, row.label = body, label
@@ -159,15 +218,22 @@ def seed_documents(session: Session) -> int:
     return written
 
 
-def load_documents_from_db() -> list[tuple[str, str, str]]:
+def load_documents_from_db(tenant: str | None = None) -> list[tuple[str, str, str]]:
+    slug = (tenant or config.DEFAULT_TENANT).strip().lower()
     with SessionLocal() as session:
-        rows = session.scalars(select(Document).order_by(Document.filename)).all()
+        row = session.scalar(select(Tenant).where(Tenant.slug == slug))
+        if row is None:
+            return []
+        rows = session.scalars(
+            select(Document).where(Document.tenant_id == row.id).order_by(Document.filename)
+        ).all()
         return [(r.filename, r.label, r.body) for r in rows]
 
 
 def stats() -> dict:
     with SessionLocal() as session:
         return {
+            "tenants": session.scalar(select(func.count()).select_from(Tenant)) or 0,
             "users": session.scalar(select(func.count()).select_from(User)) or 0,
             "conversations": session.scalar(select(func.count()).select_from(Conversation)) or 0,
             "messages": session.scalar(select(func.count()).select_from(Message)) or 0,

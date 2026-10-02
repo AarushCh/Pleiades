@@ -27,7 +27,7 @@ from api.schemas import (
     SearchResponse,
 )
 from src import config
-from src.db import Conversation, Message, SessionLocal, User, init_db, now, seed_documents
+from src.db import Conversation, Message, SessionLocal, Tenant, User, init_db, now, seed_documents
 from src.rag import SupportAssistant
 
 STATE: dict = {}
@@ -41,7 +41,8 @@ async def lifespan(_: FastAPI):
     STATE["database"] = await asyncio.to_thread(init_db)
     if not config.CHROMA_DIR.exists():
         raise RuntimeError("No vector index. Run: python -m src.ingest")
-    STATE["bot"] = await asyncio.to_thread(SupportAssistant)
+    STATE["bots"] = {}
+    STATE["bots"][config.DEFAULT_TENANT] = await asyncio.to_thread(SupportAssistant)
     yield
     STATE.clear()
 
@@ -77,11 +78,21 @@ async def security_headers(request, call_next):
     return response
 
 
-def bot() -> SupportAssistant:
-    instance = STATE.get("bot")
-    if instance is None:
+def bot(tenant: str | None = None) -> SupportAssistant:
+    bots = STATE.get("bots")
+    if bots is None:
         raise HTTPException(503, "Assistant is still starting")
-    return instance
+    slug = (tenant or config.DEFAULT_TENANT).strip().lower()
+    if slug not in bots:
+        bots[slug] = SupportAssistant(tenant=slug)
+    return bots[slug]
+
+
+def tenant_slug(db: Session, user: User) -> str:
+    row = db.get(Tenant, user.tenant_id)
+    if row is None:
+        raise HTTPException(404, "Unknown organisation")
+    return row.slug
 
 
 def sse(event: str, data: dict) -> str:
@@ -103,8 +114,9 @@ def health() -> HealthResponse:
 
 
 @app.post("/api/search", response_model=SearchResponse)
-async def search(req: SearchRequest, _: User = Depends(current_user)) -> SearchResponse:
-    b = bot()
+async def search(req: SearchRequest, user: User = Depends(current_user),
+                 db: Session = Depends(get_db)) -> SearchResponse:
+    b = bot(tenant_slug(db, user))
     start = time.perf_counter()
     r = await asyncio.to_thread(b.retrieve, req.query, [], req.top_k)
     return SearchResponse(
@@ -118,10 +130,10 @@ async def search(req: SearchRequest, _: User = Depends(current_user)) -> SearchR
 def _conversation(db: Session, user: User, conversation_id: int | None) -> Conversation:
     if conversation_id:
         convo = db.get(Conversation, conversation_id)
-        if convo is None or convo.user_id != user.id:
+        if convo is None or convo.user_id != user.id or convo.tenant_id != user.tenant_id:
             raise HTTPException(404, "Conversation not found")
         return convo
-    convo = Conversation(user_id=user.id)
+    convo = Conversation(tenant_id=user.tenant_id, user_id=user.id)
     db.add(convo)
     db.commit()
     db.refresh(convo)
@@ -145,7 +157,7 @@ async def chat(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    b = bot()
+    b = bot(tenant_slug(db, user))
     question = req.question.strip()
     if not question:
         raise HTTPException(422, "Question is empty")
@@ -207,8 +219,10 @@ async def chat(
             with SessionLocal() as write:
                 convo_row = write.get(Conversation, convo_id)
                 if convo_row is not None:
-                    write.add(Message(conversation_id=convo_id, role="user", content=question))
+                    write.add(Message(tenant_id=convo_row.tenant_id,
+                                      conversation_id=convo_id, role="user", content=question))
                     write.add(Message(
+                        tenant_id=convo_row.tenant_id,
                         conversation_id=convo_id,
                         role="assistant",
                         content=answer,
@@ -236,7 +250,7 @@ def list_conversations(
 ) -> list[ConversationOut]:
     rows = db.scalars(
         select(Conversation)
-        .where(Conversation.user_id == user.id)
+        .where(Conversation.tenant_id == user.tenant_id, Conversation.user_id == user.id)
         .order_by(Conversation.updated_at.desc())
         .limit(50)
     ).all()
@@ -281,7 +295,7 @@ def delete_conversation(
 def reseed(user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
     if user.email not in ADMINS:
         raise HTTPException(403, "Admin access required")
-    return {"synced": seed_documents(db)}
+    return {"synced": seed_documents(db, user.tenant_id)}
 
 
 if DIST.exists():

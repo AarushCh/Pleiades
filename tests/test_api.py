@@ -41,11 +41,28 @@ def test_credential_validation():
     assert validate_credentials("a@b.co", "correct-horse") is None
 
 
+def test_signup_is_rate_limited(client):
+    from api.deps import _HITS
+
+    _HITS.clear()
+    codes = [
+        client.post(
+            "/api/auth/signup",
+            json={"name": "X", "email": "not-an-email", "password": "correct-horse"},
+        ).status_code
+        for _ in range(12)
+    ]
+    _HITS.clear()
+    assert codes[0] == 422
+    assert 429 in codes
+
+
 def test_token_roundtrip():
     from src.auth import decode_token
 
-    payload = decode_token(create_token(7, "a@b.co"))
+    payload = decode_token(create_token(7, "a@b.co", 3))
     assert payload["sub"] == "7"
+    assert payload["tid"] == "3"
     assert decode_token("garbage") is None
 
 

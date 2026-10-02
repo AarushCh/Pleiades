@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import shutil
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -14,8 +13,13 @@ from src.embeddings import MiniLMEmbeddings
 HEADERS = [("#", "doc_title"), ("##", "section"), ("###", "subsection")]
 
 
-def load_documents() -> list[Document]:
-    rows = _from_database() if config.KB_FROM_DB else []
+def collection_for(tenant: str | None = None) -> str:
+    slug = (tenant or config.DEFAULT_TENANT).strip().lower().replace("-", "_")
+    return f"{config.COLLECTION_NAME}_{slug}"
+
+
+def load_documents(tenant: str | None = None) -> list[Document]:
+    rows = _from_database(tenant) if config.KB_FROM_DB else []
     if rows:
         return rows
 
@@ -35,11 +39,11 @@ def load_documents() -> list[Document]:
     ]
 
 
-def _from_database() -> list[Document]:
+def _from_database(tenant: str | None = None) -> list[Document]:
     try:
         from src.db import load_documents_from_db
 
-        rows = load_documents_from_db()
+        rows = load_documents_from_db(tenant)
     except Exception:
         return []
 
@@ -75,25 +79,26 @@ def split_documents(docs: list[Document]) -> list[Document]:
     return chunks
 
 
-def get_vectorstore() -> Chroma:
+def get_vectorstore(tenant: str | None = None) -> Chroma:
     return Chroma(
-        collection_name=config.COLLECTION_NAME,
+        collection_name=collection_for(tenant),
         embedding_function=MiniLMEmbeddings(),
         persist_directory=str(config.CHROMA_DIR),
         collection_metadata={"hnsw:space": config.DISTANCE_METRIC},
     )
 
 
-def build_index(rebuild: bool = False) -> Chroma:
-    if rebuild and config.CHROMA_DIR.exists():
-        shutil.rmtree(config.CHROMA_DIR)
-        print(f"Removed existing index at {config.CHROMA_DIR}")
+def build_index(tenant: str | None = None, rebuild: bool = False) -> Chroma:
+    name = collection_for(tenant)
+    if rebuild:
+        get_vectorstore(tenant).delete_collection()
+        print(f"Removed collection '{name}'")
 
-    docs = load_documents()
+    docs = load_documents(tenant)
     chunks = split_documents(docs)
     print(f"Loaded {len(docs)} documents -> {len(chunks)} chunks")
 
-    store = get_vectorstore()
+    store = get_vectorstore(tenant)
     existing = set(store.get(include=[])["ids"])
     new = [c for c in chunks if c.metadata["hash"] not in existing]
 
@@ -103,11 +108,13 @@ def build_index(rebuild: bool = False) -> Chroma:
     else:
         print("Index already up to date")
 
-    print(f"Collection '{config.COLLECTION_NAME}' holds {store._collection.count()} chunks")
+    print(f"Collection '{name}' holds {store._collection.count()} chunks")
     return store
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build the enterprise knowledge base index")
     parser.add_argument("--rebuild", action="store_true", help="wipe the index first")
-    build_index(rebuild=parser.parse_args().rebuild)
+    parser.add_argument("--tenant", default=None, help="tenant slug (default: the default tenant)")
+    args = parser.parse_args()
+    build_index(tenant=args.tenant, rebuild=args.rebuild)

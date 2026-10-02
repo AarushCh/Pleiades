@@ -106,6 +106,7 @@ class Retrieval:
 
 @dataclass
 class SupportAssistant:
+    tenant: str = config.DEFAULT_TENANT
     top_k: int = config.TOP_K
     history: list[tuple[str, str]] = field(default_factory=list)
 
@@ -116,12 +117,12 @@ class SupportAssistant:
 
         self.llm, self.backend_name, self.fallbacks = get_llm_with_fallbacks()
         self.last_error: str | None = None
-        self.store = get_vectorstore()
+        self.store = get_vectorstore(self.tenant)
         self.answer_chain = ANSWER_PROMPT | self.llm | StrOutputParser()
         self.condense_chain = CONDENSE_PROMPT | self.llm | StrOutputParser()
         self.expand_chain = EXPAND_PROMPT | self.llm | StrOutputParser()
 
-        self.chunks = split_documents(load_documents())
+        self.chunks = split_documents(load_documents(self.tenant))
         self.by_hash = {c.metadata["hash"]: c for c in self.chunks}
         self.bm25 = BM25Okapi([tokenize(c.page_content) for c in self.chunks])
 

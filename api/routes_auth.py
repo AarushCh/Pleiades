@@ -6,9 +6,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.deps import client_ip, current_user, get_db, rate_limit
+from api.deps import client_ip, current_tenant, current_user, get_db, rate_limit
 from src.auth import create_token, hash_password, validate_credentials, verify_password
-from src.db import User
+from src.db import Tenant, User
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -28,17 +28,20 @@ class AuthResponse(BaseModel):
     token: str
     name: str
     email: str
+    tenant: str
 
 
 @router.post("/signup", response_model=AuthResponse)
-def signup(req: SignupRequest, request: Request, db: Session = Depends(get_db)) -> AuthResponse:
+def signup(req: SignupRequest, request: Request, db: Session = Depends(get_db),
+           tenant: Tenant = Depends(current_tenant)) -> AuthResponse:
     rate_limit(f"signup:{client_ip(request)}", 10, 900)
     email = req.email.strip().lower()
     problem = validate_credentials(email, req.password)
     if problem:
         raise HTTPException(422, problem)
 
-    user = User(email=email, name=req.name.strip(), password_hash=hash_password(req.password))
+    user = User(tenant_id=tenant.id, email=email, name=req.name.strip(),
+                password_hash=hash_password(req.password))
     db.add(user)
     try:
         db.commit()
@@ -47,20 +50,25 @@ def signup(req: SignupRequest, request: Request, db: Session = Depends(get_db)) 
         raise HTTPException(409, "An account with that email already exists") from None
 
     db.refresh(user)
-    return AuthResponse(token=create_token(user.id, user.email), name=user.name, email=user.email)
+    return AuthResponse(token=create_token(user.id, user.email, tenant.id), name=user.name,
+                        email=user.email, tenant=tenant.slug)
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)) -> AuthResponse:
+def login(req: LoginRequest, request: Request, db: Session = Depends(get_db),
+          tenant: Tenant = Depends(current_tenant)) -> AuthResponse:
     email = req.email.strip().lower()
     rate_limit(f"login:{client_ip(request)}", 10, 300)
-    rate_limit(f"login:{email}", 10, 300)
-    user = db.scalar(select(User).where(User.email == email))
+    rate_limit(f"login:{tenant.slug}:{email}", 10, 300)
+    user = db.scalar(select(User).where(User.tenant_id == tenant.id, User.email == email))
     if user is None or not verify_password(req.password, user.password_hash):
         raise HTTPException(401, "Email or password is incorrect")
-    return AuthResponse(token=create_token(user.id, user.email), name=user.name, email=user.email)
+    return AuthResponse(token=create_token(user.id, user.email, tenant.id), name=user.name,
+                        email=user.email, tenant=tenant.slug)
 
 
 @router.get("/me", response_model=AuthResponse)
-def me(user: User = Depends(current_user)) -> AuthResponse:
-    return AuthResponse(token="", name=user.name, email=user.email)
+def me(user: User = Depends(current_user), db: Session = Depends(get_db)) -> AuthResponse:
+    tenant = db.get(Tenant, user.tenant_id)
+    return AuthResponse(token="", name=user.name, email=user.email,
+                        tenant=tenant.slug if tenant else "")

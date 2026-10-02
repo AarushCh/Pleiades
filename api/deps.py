@@ -5,11 +5,12 @@ from collections import deque
 from collections.abc import Generator
 
 from fastapi import Depends, Header, HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src import config
 from src.auth import decode_token
-from src.db import SessionLocal, User
+from src.db import SessionLocal, Tenant, User, scope_to_tenant
 
 _HITS: dict[str, deque[float]] = {}
 
@@ -42,6 +43,17 @@ def get_db() -> Generator[Session]:
         db.close()
 
 
+def current_tenant(
+    x_tenant: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> Tenant:
+    slug = (x_tenant or config.DEFAULT_TENANT).strip().lower()
+    tenant = db.scalar(select(Tenant).where(Tenant.slug == slug))
+    if tenant is None:
+        raise HTTPException(404, "Unknown organisation")
+    return tenant
+
+
 def current_user(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
@@ -54,9 +66,11 @@ def current_user(
         raise HTTPException(401, "Session expired, sign in again")
 
     try:
+        tenant_id = int(payload["tid"])
+        scope_to_tenant(db, tenant_id)
         user = db.get(User, int(payload["sub"]))
     except (KeyError, TypeError, ValueError):
-        user = None
-    if user is None:
+        raise HTTPException(401, "Session expired, sign in again") from None
+    if user is None or user.tenant_id != tenant_id:
         raise HTTPException(401, "Account no longer exists")
     return user

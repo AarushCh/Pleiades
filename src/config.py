@@ -24,6 +24,9 @@ EXPAND_THRESHOLD = float(os.getenv("EXPAND_THRESHOLD", "0.75"))
 KEYWORD_BONUS = 0.06
 ANCHORS = 4
 
+DEFAULT_TENANT = os.getenv("DEFAULT_TENANT", "nimbus").strip().lower()
+DEFAULT_TENANT_NAME = os.getenv("DEFAULT_TENANT_NAME", "Nimbus Networks").strip()
+
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 JWT_SECRET = os.getenv("JWT_SECRET", "").strip()
 TOKEN_DAYS = int(os.getenv("TOKEN_DAYS", "7"))

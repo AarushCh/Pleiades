@@ -41,10 +41,11 @@ def validate_credentials(email: str, password: str) -> str | None:
     return None
 
 
-def create_token(user_id: int, email: str) -> str:
+def create_token(user_id: int, email: str, tenant_id: int) -> str:
     payload = {
         "sub": str(user_id),
         "email": email,
+        "tid": str(tenant_id),
         "iat": datetime.now(UTC),
         "exp": datetime.now(UTC) + timedelta(days=TOKEN_DAYS),
     }
