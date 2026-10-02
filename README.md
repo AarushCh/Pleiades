@@ -26,7 +26,7 @@ The demo tenant is **Nimbus Networks**, a fictional ISP.
 | `.\run.ps1 dev` | API with reload on `:8000`, Next dev server on `:5173` |
 | `.\run.ps1 demo` | Scripted five-question walkthrough in the terminal |
 | `.\run.ps1 cli` | Interactive terminal client |
-| `.\run.ps1 test` | pytest suite (33 tests) |
+| `.\run.ps1 test` | pytest suite (46 tests) |
 | `.\run.ps1 eval` | Retrieval recall benchmark |
 | `.\run.ps1 backend` | Reports which model is live and makes a test call |
 
@@ -66,13 +66,13 @@ single port. `npm run dev` instead runs Next on `:5173` and proxies `/api` to `:
 
 Two services. Both have usable free tiers.
 
-**1. Database — Supabase** (Neon works unchanged; the schema is plain Postgres)
+**1. Database: Supabase** (Neon works unchanged; the schema is plain Postgres)
 Create a project, copy the connection string from Settings → Database, and set it as
 `DATABASE_URL`. Run `python -m src.db` once to create the schema and seed the documents table.
 Without `DATABASE_URL` the app falls back to a local SQLite file, so development needs no setup.
 
-**2. App — Render** (`render.yaml` is committed; Railway and Fly.io work the same way)
-Point Render at the repo and set four secrets:
+**2. App: Render** (`render.yaml` is committed; Railway and Fly.io work the same way)
+Point Render at the repo and set these:
 
 | Variable | Value |
 |---|---|
@@ -112,8 +112,22 @@ changes.
 
 Signup and login are email plus a bcrypt-hashed password, with a signed JWT held in the browser
 and verified on every request. Conversations and messages are written to Postgres and scoped to
-their owner: requesting another user's conversation returns 404, not their data. Tests cover
-that boundary.
+their owner: requesting another user's conversation returns 404, not their data.
+
+### Organisations
+
+One deployment serves many organisations, and none of them can see another's data. Every row in
+`users`, `conversations`, `messages` and `documents` carries a `tenant_id`. Sign-up and sign-in
+pick the organisation from the `X-Tenant` header (Nimbus Networks when it's absent); after that
+the organisation travels inside the signed token and is checked against the account on every
+request, so a token can't be replayed against another one. An email address is unique within an
+organisation, not across them.
+
+Each organisation gets its own Chroma collection rather than a share of one collection behind a
+filter. A bug in retrieval can't reach documents it was never indexed next to.
+
+Postgres row-level security is written and ready behind `DB_RLS=1`. It stays off until it has
+been run against a live database. `tests/test_isolation.py` covers the boundary either way.
 
 The `documents` table is the source of truth for the knowledge base. `python -m src.ingest`
 reads from it and falls back to `data/*.md` when the table is empty, so the corpus can be
@@ -121,8 +135,8 @@ edited in the database without touching the repository.
 
 ## Retrieval
 
-Plain vector search fails on this corpus in ways worth showing, and the failures are not
-subtle — they produce confidently wrong answers.
+Plain vector search fails on this corpus in ways worth showing. The failures aren't subtle.
+They produce confidently wrong answers.
 
 **Vocabulary mismatch.** Ask *"I was down for 3 days, do I get anything back?"* and the SLA
 credit table does not appear in the top 12 results. The customer says *down* and *get anything
@@ -136,13 +150,13 @@ answer is the DOA clause, which waives triage inside 7 days. Retrieval ranked it
 So retrieval runs several ways and fuses them:
 
 1. **Vector search** on the question exactly as asked.
-2. **Query expansion** — the LLM rewrites the question into up to 3 queries in the knowledge
+2. **Query expansion.** The LLM rewrites the question into up to 3 queries in the knowledge
    base's own vocabulary. It is given the list of section headings that actually exist, which
    matters: blind expansion invented plausible-sounding clause names and retrieved nothing.
    Grounding the expander in real headings took DOA retrieval from 0/4 to 12/12.
 3. **BM25 keyword search**, which catches exact tokens vector search dilutes: `RX-900`,
    `TKT-10231`, `POL-RW-004`.
-4. **Anchored fusion** — results rank by maximum cosine similarity across every query, plus a
+4. **Anchored fusion.** Results rank by maximum cosine similarity across every query, plus a
    bonus for keyword hits, but the original question's top hits are always kept. Without
    anchoring, a strong expansion match displaced correct chunks and expansion made three
    benchmark cases worse.
@@ -163,6 +177,10 @@ three runs each because expansion is non-deterministic.
 |---|---|---|
 | Vector only | 80.0% | 12 ms |
 | With expansion and fusion | **93.3%** | ~1.0 s |
+
+The 93.3% was measured with Llama 3.3 70B on Groq. Expansion needs a model that answers: with
+no working model it returns nothing and recall falls back to the vector-only 80.0%. A local
+Llama 3 8B reaches 86.7%, because it tends to name one section instead of writing three queries.
 
 The four cases expansion fixes are exactly the ones plain search gets wrong: the DOA clause,
 the SLA credit table, the payment-failure timeline, and the RMA escalation remedy.
@@ -196,8 +214,8 @@ Auto-detected in order: Ollama → Llama API → Groq → OpenRouter → extract
 
 Every configured backend that is not the primary becomes a LangChain fallback. If Groq returns
 a rate-limit error mid-demo, the chain retries on Ollama and then OpenRouter rather than
-failing. This is not theoretical — the daily token cap was hit while benchmarking, and the
-failover is what kept the pipeline answering.
+failing. We hit Groq's daily token cap while benchmarking, and the failover is what kept the
+pipeline answering.
 
 `python -m src.llm` reports the live backend, makes a test call, and on an unknown-model error
 lists every model your key can actually reach.
@@ -215,7 +233,7 @@ src/cli.py         terminal client
 src/app.py         Streamlit UI (alternative to the Next.js one)
 api/               FastAPI service, SSE streaming, session store
 frontend/          Next.js app router, glass design system
-tests/             33 tests, LLM-dependent ones skip unless a backend answers
+tests/             46 tests, LLM-dependent ones skip unless a backend answers
 training/          project assistant: corpus, dataset, QLoRA fine-tune, evaluation
 eval/              labelled retrieval benchmark
 ```
@@ -229,14 +247,14 @@ re-run `python -m src.ingest`. Only new chunks are embedded.
 
 `.\run.ps1 demo` covers the five behaviours worth showing:
 
-1. **Cross-document synthesis** — the amber-LED question pulls the manual's LED table and the
+1. **Cross-document synthesis.** The amber-LED question pulls the manual's LED table and the
    matching resolved ticket TKT-10231.
-2. **Policy override** — "router died 4 days after delivery" must hit the DOA clause. Answering
+2. **Policy override.** "Router died 4 days after delivery" must hit the DOA clause. Answering
    from the RMA section alone tells the customer to run triage, which is wrong.
-3. **Structured lookup** — plan comparison retrieves the catalog table.
-4. **Multi-document arithmetic** — "down 3 days last month" resolves to ~90.4% uptime and a 50%
+3. **Structured lookup.** Plan comparison retrieves the catalog table.
+4. **Multi-document arithmetic.** "Down 3 days last month" resolves to ~90.4% uptime and a 50%
    credit, combining the billing FAQ with the SLA table in the catalog.
-5. **Refusal** — an out-of-scope question returns a one-line refusal and a human handoff
+5. **Refusal.** An out-of-scope question returns a one-line refusal and a human handoff
    instead of answering from the model's own knowledge.
 
 ## Project assistant
