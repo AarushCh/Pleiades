@@ -162,7 +162,10 @@ class SupportAssistant:
             self.last_error = f"Query expansion unavailable: {type(exc).__name__}"
             return []
         lines = [ln.strip(" -*\t") for ln in raw.splitlines() if ln.strip()]
-        return [ln for ln in lines if 3 < len(ln) < 160][:3]
+        queries = [ln for ln in lines if 3 < len(ln) < 160][:3]
+        if not queries:
+            self.last_error = "Query expansion returned nothing usable"
+        return queries
 
     def retrieve(self, question: str, history: list[tuple[str, str]] | None = None,
                  top_k: int | None = None) -> Retrieval:

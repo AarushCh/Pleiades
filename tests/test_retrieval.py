@@ -93,3 +93,14 @@ def test_out_of_scope_questions_are_refused(assistant, question, fabrication):
 def test_cross_document_question_pulls_manual_and_tickets(assistant):
     r = assistant.retrieve("internet light is solid orange and nothing works", [])
     assert {"RX-500/RX-900 Router Manual", "Historical Support Tickets"} <= labels(r)
+
+
+def test_an_empty_expansion_is_recorded_not_swallowed(assistant, monkeypatch):
+    class Silent:
+        def invoke(self, _payload):
+            return ""
+
+    monkeypatch.setattr(assistant, "expand_chain", Silent())
+    assistant.last_error = None
+    assert assistant._expand("anything at all") == []
+    assert assistant.last_error is not None
