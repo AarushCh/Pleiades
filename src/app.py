@@ -112,9 +112,10 @@ if prompt:
 
     with st.chat_message("assistant"):
         start = time.perf_counter()
-        with st.spinner("Searching the knowledge base…"):
-            r = bot.retrieve(prompt)
-        answer = st.write_stream(bot.stream(prompt, r))
+        with st.spinner("Searching the knowledge base and checking the answer…"):
+            turn = bot.respond(prompt)
+        r, answer = turn["retrieval"], turn["answer"]
+        st.markdown(answer)
         latency = time.perf_counter() - start
 
         bot.remember(prompt, answer)

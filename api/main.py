@@ -170,38 +170,21 @@ async def chat(
 
     async def events():
         start = time.perf_counter()
-        try:
-            r = await asyncio.to_thread(b.retrieve, question, history)
-        except Exception as exc:
-            yield sse("error", {"message": f"Retrieval failed: {exc}"})
-            return
-
-        tokens = b.prompt_tokens(question, r, history)
-        yield sse("meta", {
-            "conversation_id": convo_id,
-            "backend": b.backend_name,
-            "query": r.query,
-            "condensed": r.condensed,
-            "expansions": r.expansions,
-            "sources": b.sources(r),
-            "retrieval_ms": round((time.perf_counter() - start) * 1000, 1),
-            "prompt_tokens": tokens,
-        })
-
-        chunks: list[str] = []
         queue: asyncio.Queue = asyncio.Queue()
         loop = asyncio.get_running_loop()
 
         def produce():
             try:
-                for token in b.stream(question, r, history):
-                    loop.call_soon_threadsafe(queue.put_nowait, ("token", token))
+                for update in b.graph.stream({"question": question, "history": history},
+                                             stream_mode="updates"):
+                    loop.call_soon_threadsafe(queue.put_nowait, ("update", update))
             except Exception as exc:
                 loop.call_soon_threadsafe(queue.put_nowait, ("error", str(exc)))
             finally:
                 loop.call_soon_threadsafe(queue.put_nowait, ("done", None))
 
         task = asyncio.create_task(asyncio.to_thread(produce))
+        r, tokens, turn = None, 0, {}
         while True:
             kind, payload = await queue.get()
             if kind == "done":
@@ -209,14 +192,29 @@ async def chat(
             if kind == "error":
                 yield sse("error", {"message": payload})
                 break
-            chunks.append(payload)
-            yield sse("token", {"text": payload})
+            node, update = next(iter(payload.items()))
+            turn.update(update or {})
+            if node == "retrieve":
+                r = update["retrieval"]
+                tokens = b.prompt_tokens(question, r, history)
+                yield sse("meta", {
+                    "conversation_id": convo_id,
+                    "backend": b.backend_name,
+                    "query": r.query,
+                    "condensed": r.condensed,
+                    "expansions": r.expansions,
+                    "sources": b.sources(r),
+                    "retrieval_ms": round((time.perf_counter() - start) * 1000, 1),
+                    "prompt_tokens": tokens,
+                })
         await task
 
-        answer = "".join(chunks).strip()
+        answer = turn.get("answer", "")
+        if answer:
+            yield sse("token", {"text": answer})
         elapsed = round((time.perf_counter() - start) * 1000)
 
-        if answer:
+        if answer and r is not None:
             with SessionLocal() as write:
                 convo_row = write.get(Conversation, convo_id)
                 if convo_row is not None:
@@ -236,7 +234,13 @@ async def chat(
                     convo_row.updated_at = now()
                     write.commit()
 
-        yield sse("done", {"total_ms": elapsed, "conversation_id": convo_id})
+        yield sse("done", {
+            "total_ms": elapsed,
+            "conversation_id": convo_id,
+            "outcome": turn.get("outcome"),
+            "unsupported": turn.get("unsupported", []),
+            "attempts": turn.get("attempts", 0),
+        })
 
     return StreamingResponse(
         events(),

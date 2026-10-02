@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -144,6 +143,10 @@ class SupportAssistant:
                 headings.append(line)
         self.sections = "\n".join(headings)
 
+        from src.graph import build_graph
+
+        self.graph = build_graph(self)
+
     @property
     def has_llm(self) -> bool:
         return not self.backend_name.startswith("Extractive")
@@ -239,9 +242,9 @@ class SupportAssistant:
             "question": question,
         }
 
-    def stream(self, question: str, r: Retrieval,
-               history: list[tuple[str, str]] | None = None) -> Iterator[str]:
-        yield from self.answer_chain.stream(self._payload(question, r, history))
+    def respond(self, question: str, history: list[tuple[str, str]] | None = None) -> dict:
+        history = self.history if history is None else history
+        return self.graph.invoke({"question": question, "history": history})
 
     def prompt_tokens(self, question: str, r: Retrieval,
                       history: list[tuple[str, str]] | None = None) -> int:
@@ -269,12 +272,15 @@ class SupportAssistant:
         return out
 
     def answer(self, question: str, remember: bool = True) -> dict:
-        r = self.retrieve(question)
+        turn = self.respond(question)
+        r, text = turn["retrieval"], turn["answer"]
         payload = self._payload(question, r)
-        text = self.answer_chain.invoke(payload).strip()
         if remember:
             self.remember(question, text)
         return {
+            "outcome": turn["outcome"],
+            "unsupported": turn.get("unsupported", []),
+            "attempts": turn["attempts"],
             "answer": text,
             "sources": self.sources(r),
             "search_query": r.query,

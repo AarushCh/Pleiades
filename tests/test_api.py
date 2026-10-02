@@ -127,7 +127,7 @@ def test_search_respects_top_k(client, account):
 
 
 def test_chat_streams_and_persists(client, account):
-    events, meta = [], None
+    events, meta, done = [], None, None
     pending = None
     with client.stream(
         "POST",
@@ -142,10 +142,14 @@ def test_chat_streams_and_persists(client, account):
                 events.append(pending)
             elif line.startswith("data:") and pending == "meta" and meta is None:
                 meta = json.loads(line.split(":", 1)[1].strip())
+            elif line.startswith("data:") and pending == "done":
+                done = json.loads(line.split(":", 1)[1].strip())
 
     assert events[0] == "meta"
     assert "token" in events
     assert events[-1] == "done"
+    assert done["outcome"] in {"answered", "escalated"}
+    assert done["attempts"] >= 1
     assert meta["prompt_tokens"] > 0
     assert meta["sources"]
 

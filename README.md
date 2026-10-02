@@ -26,7 +26,7 @@ The demo tenant is **Nimbus Networks**, a fictional ISP.
 | `.\run.ps1 dev` | API with reload on `:8000`, Next dev server on `:5173` |
 | `.\run.ps1 demo` | Scripted five-question walkthrough in the terminal |
 | `.\run.ps1 cli` | Interactive terminal client |
-| `.\run.ps1 test` | pytest suite (48 tests) |
+| `.\run.ps1 test` | pytest suite (61 tests) |
 | `.\run.ps1 eval` | Retrieval recall benchmark |
 | `.\run.ps1 backend` | Reports which model is live and makes a test call |
 
@@ -47,12 +47,14 @@ data/*.md ─► heading split ─► size split ─► MiniLM-L6-v2 (ONNX) ─�
                                           │
 question ─► condense (if follow-up) ─► expand ─► vector × N + BM25 ─► anchored fusion ─┐
                                                                                        ▼
-                                                    grounded prompt ─► Llama 3 ─► answer
+                                                    grounded prompt ─► Llama 3 ─► draft
+                                                                                       │
+                       answer ◄── every figure found in the sources? ── no ─► redraft once, then hand over
 ```
 
 | Layer | Choice | Why |
 |---|---|---|
-| Orchestration | LangChain (LCEL) | Composable chains, swappable model backends |
+| Orchestration | LangChain (LCEL) and LangGraph | Chains for each model call; a graph for retrieve, draft, verify and hand over |
 | Vector store | ChromaDB, cosine, persisted | Zero-config, embedded, no server |
 | Embeddings | all-MiniLM-L6-v2 via Chroma's ONNX runtime | ~80 MB instead of a multi-GB torch install |
 | Generation | Llama 3 (any OpenAI-compatible host, Ollama local) | Open weights, self-hostable for enterprise data |
@@ -190,6 +192,30 @@ Llama 3 8B reaches 86.7%, because it tends to name one section instead of writin
 The four cases expansion fixes are exactly the ones plain search gets wrong: the DOA clause,
 the SLA credit table, the payment-failure timeline, and the RMA escalation remedy.
 
+## Checking the answer before anyone sees it
+
+A model that has the right passage can still write the wrong number. A refund window of 14 days
+where the policy says 7 reads perfectly well, and it's the kind of mistake that costs money.
+
+So the answer isn't streamed as it's written. `src/graph.py` runs each turn as a LangGraph:
+
+1. **Retrieve.** The sources go to the client straight away, so the UI can show them.
+2. **Draft.** The model writes a complete answer from the retrieved passages.
+3. **Verify.** `src/grounding.py` pulls every figure out of the draft (prices, percentages,
+   durations, model and ticket numbers) and checks each one against the passages, the
+   customer's own question and the earlier turns. List numbering and "Step 3" don't count.
+   There's no model call in this step, so it can't hallucinate an approval.
+4. **Redraft or hand over.** If a figure isn't in the sources, the model gets one more try, told
+   which figures it couldn't back up. If the second draft still has one, or the model returned
+   nothing, the customer gets a short note that a person will pick it up instead of a guess.
+
+The `done` event carries the outcome, the figures that failed and how many drafts it took.
+
+What it doesn't catch yet: figures written as words ("seven days"), and arithmetic. A
+correctly derived 90.4% uptime gets flagged because 90.4 doesn't appear in any source.
+That's deliberate for now. The fix is to do the calculation in code and let the model explain
+the result.
+
 ## Token budget
 
 | Measure | Effect |
@@ -234,11 +260,13 @@ src/embeddings.py  LangChain Embeddings over Chroma's ONNX MiniLM
 src/ingest.py      load → chunk → embed → persist (idempotent, --rebuild to wipe)
 src/llm.py         backend selection, fallbacks, health check
 src/rag.py         hybrid retrieval and grounded generation
+src/graph.py       LangGraph turn: retrieve, draft, verify, redraft or hand over
+src/grounding.py   checks every figure in an answer against its sources
 src/cli.py         terminal client
 src/app.py         Streamlit UI (alternative to the Next.js one)
 api/               FastAPI service, SSE streaming, session store
 frontend/          Next.js app router, glass design system
-tests/             48 tests, LLM-dependent ones skip unless a backend answers
+tests/             61 tests, LLM-dependent ones skip unless a backend answers
 training/          project assistant: corpus, dataset, QLoRA fine-tune, evaluation
 eval/              labelled retrieval benchmark
 ```
@@ -257,8 +285,10 @@ re-run `python -m src.ingest`. Only new chunks are embedded.
 2. **Policy override.** "Router died 4 days after delivery" must hit the DOA clause. Answering
    from the RMA section alone tells the customer to run triage, which is wrong.
 3. **Structured lookup.** Plan comparison retrieves the catalog table.
-4. **Multi-document arithmetic.** "Down 3 days last month" resolves to ~90.4% uptime and a 50%
-   credit, combining the billing FAQ with the SLA table in the catalog.
+4. **Multi-document arithmetic.** "Down 3 days last month" needs the billing FAQ and the SLA
+   table in the catalog together. Models like to work out an uptime figure such as 90.4%, which
+   no source contains, so the check sends that draft back and the redraft has to quote the
+   credit band from the table, or the customer is handed to a person.
 5. **Refusal.** An out-of-scope question returns a one-line refusal and a human handoff
    instead of answering from the model's own knowledge.
 

@@ -23,18 +23,13 @@ BOLD, DIM, RESET = "\033[1m", "\033[2m", "\033[0m"
 def ask(bot: SupportAssistant, question: str) -> None:
     print(f"\n{BOLD}Customer:{RESET} {question}\n")
     start = time.perf_counter()
-    r = bot.retrieve(question)
-    retrieved = time.perf_counter() - start
-
-    chunks = []
-    for token in bot.stream(question, r):
-        chunks.append(token)
-        print(token, end="", flush=True)
-    answer = "".join(chunks).strip()
+    turn = bot.respond(question)
+    r, answer = turn["retrieval"], turn["answer"]
+    print(answer)
     bot.remember(question, answer)
     total = time.perf_counter() - start
 
-    print("\n")
+    print()
     if r.condensed:
         print(f"{DIM}  condensed: {r.query}{RESET}")
     for e in r.expansions:
@@ -43,7 +38,10 @@ def ask(bot: SupportAssistant, question: str) -> None:
         loc = f" > {s['section']}" if s["section"] else ""
         tag = f"{s['score']:.2f}" if s["score"] else " kw "
         print(f"{DIM}  [{tag}] {s['label']}{loc}{RESET}")
-    print(f"{DIM}  retrieval {retrieved*1000:.0f}ms | total {total:.1f}s{RESET}\n")
+    checked = f"{turn['outcome']} after {turn['attempts']} draft(s)"
+    if turn.get("unsupported"):
+        checked += f", unsupported: {', '.join(turn['unsupported'])}"
+    print(f"{DIM}  {checked} | total {total:.1f}s{RESET}\n")
 
 
 def main() -> None:
