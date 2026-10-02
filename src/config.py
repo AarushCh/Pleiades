@@ -8,9 +8,11 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
-DATA_DIR = ROOT / "data"
-CHROMA_DIR = ROOT / "chroma_db"
-COLLECTION_NAME = "enterprise_kb"
+DATA_DIR = Path(os.getenv("KB_DIR") or ROOT / "data")
+CHROMA_DIR = Path(os.getenv("CHROMA_DIR") or ROOT / "chroma_db")
+COLLECTION_NAME = os.getenv("COLLECTION_NAME", "enterprise_kb")
+KB_FROM_DB = os.getenv("KB_FROM_DB", "1").strip().lower() not in {"0", "false", "no"}
+SYSTEM_PROMPT_FILE = os.getenv("SYSTEM_PROMPT_FILE", "").strip()
 DISTANCE_METRIC = "cosine"
 
 CHUNK_SIZE = 900

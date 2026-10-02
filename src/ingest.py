@@ -15,7 +15,7 @@ HEADERS = [("#", "doc_title"), ("##", "section"), ("###", "subsection")]
 
 
 def load_documents() -> list[Document]:
-    rows = _from_database()
+    rows = _from_database() if config.KB_FROM_DB else []
     if rows:
         return rows
 

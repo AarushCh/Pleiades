@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Iterator
 
 from langchain_core.documents import Document
@@ -27,6 +28,9 @@ SYSTEM_PROMPT = (
     "End with a Sources line citing the labels you actually used; omit that line entirely if "
     "you could not answer. Under 180 words, warm and direct, no filler openers."
 )
+
+if config.SYSTEM_PROMPT_FILE:
+    SYSTEM_PROMPT = Path(config.SYSTEM_PROMPT_FILE).read_text(encoding="utf-8").strip()
 
 ANSWER_PROMPT = ChatPromptTemplate.from_messages([
     ("system", SYSTEM_PROMPT),
