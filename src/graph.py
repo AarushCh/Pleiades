@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -8,6 +9,7 @@ from src.grounding import unsupported
 from src.rag import Retrieval, format_context, format_history
 
 MAX_ATTEMPTS = 2
+MARKERS = re.compile(r"【[^】]*】")
 ESCALATION = (
     "I couldn't confirm every figure in that answer against our documentation, so I'd rather "
     "not guess. A support agent can pick this up with you."
@@ -37,7 +39,8 @@ def build_graph(bot):
                 + ", ".join(turn["unsupported"]) + "."
             )
         payload = bot._payload(question, turn["retrieval"], turn.get("history", []))
-        return {"draft": bot.answer_chain.invoke(payload).strip(), "attempts": turn["attempts"] + 1}
+        draft = MARKERS.sub("", bot.answer_chain.invoke(payload)).strip()
+        return {"draft": draft, "attempts": turn["attempts"] + 1}
 
     def verify(turn: Turn) -> Turn:
         grounds = (

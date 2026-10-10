@@ -250,6 +250,11 @@ export default function Page() {
         <section>
           <h2 className="side-h">Pipeline</h2>
           {healthError && <div className="alert">API unreachable — {healthError}</div>}
+          {health && !health.has_llm && (
+            <div className="alert">
+              No language model is answering, so replies are quoted straight from the documents.
+            </div>
+          )}
           {health?.database === "fallback" && (
             <div className="alert">
               Demo mode: the main database is unreachable, so accounts reset when the server restarts.

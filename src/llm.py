@@ -54,16 +54,19 @@ def ollama_available() -> bool:
         return False
 
 
+STUB_LABEL = "Extractive stub (no model answering)"
+
+
 def available_backends() -> list[str]:
     order = []
-    if ollama_available():
-        order.append("ollama")
     if config.LLAMA_API_BASE and config.LLAMA_API_KEY:
         order.append("llama-api")
     if config.GROQ_API_KEY:
         order.append("groq")
     if config.OPENROUTER_API_KEY:
         order.append("openrouter")
+    if ollama_available():
+        order.append("ollama")
     return order
 
 
@@ -73,30 +76,61 @@ def resolve_backend() -> str:
     return next(iter(available_backends()), "stub")
 
 
+def groq_models() -> list[str]:
+    return list(dict.fromkeys([config.GROQ_MODEL, *config.GROQ_FALLBACK_MODELS]))
+
+
+def _reasoning(model: str) -> dict:
+    if "gpt-oss" in model:
+        return {"reasoning_effort": "low"}
+    if "qwen3" in model:
+        return {"reasoning_effort": "none"}
+    return {}
+
+
+def _instances(backend: str) -> list[tuple[BaseLanguageModel, str]]:
+    if backend == "groq":
+        return [build_llm("groq", m) for m in groq_models()]
+    return [build_llm(backend)]
+
+
 def get_llm_with_fallbacks() -> tuple[BaseLanguageModel, str, list[str]]:
     chosen = resolve_backend()
-    primary, name = build_llm(chosen)
     if chosen == "stub":
+        primary, name = build_llm("stub")
         return primary, name, []
 
-    spares, models = [], []
-    for backend in available_backends():
-        if backend == chosen:
-            continue
+    built: list[tuple[BaseLanguageModel, str]] = []
+    for backend in [chosen, *(b for b in available_backends() if b != chosen)]:
         try:
-            models.append(build_llm(backend)[0])
-            spares.append(backend)
+            built += _instances(backend)
         except Exception:
-            continue
-    models.append(ExtractiveStubLLM())
-    return primary.with_fallbacks(models), name, spares + ["stub"]
+            if backend == chosen:
+                raise
+    (primary, name), spares = built[0], built[1:]
+    models = [m for m, _ in spares] + [ExtractiveStubLLM()]
+    return primary.with_fallbacks(models), name, [label for _, label in spares] + [STUB_LABEL]
 
 
 def get_llm() -> tuple[BaseLanguageModel, str]:
     return build_llm(resolve_backend())
 
 
-def build_llm(backend: str) -> tuple[BaseLanguageModel, str]:
+def first_answering(llm: BaseLanguageModel, labels: list[str]) -> tuple[str, list[str]]:
+    candidates = [llm.runnable, *llm.fallbacks] if hasattr(llm, "fallbacks") else [llm]
+    failures: list[str] = []
+    for model, label in zip(candidates, labels, strict=True):
+        if isinstance(model, ExtractiveStubLLM):
+            return label, failures
+        try:
+            model.invoke("Reply with exactly: OK")
+            return label, failures
+        except Exception as exc:
+            failures.append(f"{label}: {type(exc).__name__}")
+    return labels[-1], failures
+
+
+def build_llm(backend: str, model: str | None = None) -> tuple[BaseLanguageModel, str]:
     if backend == "ollama":
         from langchain_ollama import ChatOllama
         return (
@@ -132,16 +166,18 @@ def build_llm(backend: str) -> tuple[BaseLanguageModel, str]:
         if not config.GROQ_API_KEY:
             raise SystemExit("LLM_BACKEND=groq but GROQ_API_KEY is not set")
         from langchain_groq import ChatGroq
+        model = model or config.GROQ_MODEL
         return (
             ChatGroq(
-                model=config.GROQ_MODEL,
+                model=model,
                 api_key=config.GROQ_API_KEY,
                 temperature=config.TEMPERATURE,
                 max_tokens=config.MAX_TOKENS,
                 timeout=config.LLM_TIMEOUT,
                 max_retries=1,
+                **_reasoning(model),
             ),
-            f"Groq · {config.GROQ_MODEL}",
+            f"Groq · {model}",
         )
 
     if backend == "openrouter":
@@ -161,12 +197,12 @@ def build_llm(backend: str) -> tuple[BaseLanguageModel, str]:
             f"OpenRouter · {config.OPENROUTER_MODEL}",
         )
 
-    return ExtractiveStubLLM(), "Extractive stub (no LLM configured)"
+    return ExtractiveStubLLM(), STUB_LABEL
 
 
 def _list_models(key: str, url: str) -> list[str]:
     import json
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"})
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}", "User-Agent": "pleiades"})
     with urllib.request.urlopen(req, timeout=15) as r:
         return sorted(m["id"] for m in json.load(r).get("data", []))
 

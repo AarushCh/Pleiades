@@ -52,7 +52,9 @@ LLAMA_API_KEY = os.getenv("LLAMA_API_KEY", "").strip()
 LLAMA_API_MODEL = os.getenv("LLAMA_API_MODEL", "llama-3.3-70b")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+GROQ_FALLBACK_MODELS = [m.strip() for m in os.getenv(
+    "GROQ_FALLBACK_MODELS", "openai/gpt-oss-120b,openai/gpt-oss-20b").split(",") if m.strip()]
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")

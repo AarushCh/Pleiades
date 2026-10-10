@@ -10,7 +10,7 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from src import config
 from src.ingest import get_vectorstore
-from src.llm import get_llm_with_fallbacks
+from src.llm import get_llm, get_llm_with_fallbacks
 
 SYSTEM_PROMPT = (
     "You are the Nimbus Networks support assistant. Answer only from <context>.\n"
@@ -116,13 +116,18 @@ class SupportAssistant:
     tenant: str = config.DEFAULT_TENANT
     top_k: int = config.TOP_K
     history: list[tuple[str, str]] = field(default_factory=list)
+    fallbacks: bool = True
 
     def __post_init__(self) -> None:
         from rank_bm25 import BM25Okapi
 
         from src.ingest import load_documents, split_documents
 
-        self.llm, self.backend_name, self.fallbacks = get_llm_with_fallbacks()
+        if self.fallbacks:
+            self.llm, self.backend_name, spares = get_llm_with_fallbacks()
+        else:
+            (self.llm, self.backend_name), spares = get_llm(), []
+        self.models = [self.backend_name, *spares]
         self.last_error: str | None = None
         self.store = get_vectorstore(self.tenant)
         self.answer_chain = ANSWER_PROMPT | self.llm | StrOutputParser()

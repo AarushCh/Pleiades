@@ -27,8 +27,19 @@ from api.schemas import (
     SearchResponse,
 )
 from src import config
-from src.db import Conversation, Message, SessionLocal, Tenant, User, init_db, now, seed_documents
+from src.db import (
+    Conversation,
+    Message,
+    SessionLocal,
+    Tenant,
+    User,
+    init_db,
+    now,
+    scope_to_tenant,
+    seed_documents,
+)
 from src.ingest import build_index
+from src.llm import first_answering
 from src.rag import SupportAssistant
 
 STATE: dict = {}
@@ -43,7 +54,9 @@ async def lifespan(_: FastAPI):
     if not config.CHROMA_DIR.exists():
         raise RuntimeError("No vector index. Run: python -m src.ingest")
     STATE["bots"] = {}
-    STATE["bots"][config.DEFAULT_TENANT] = await asyncio.to_thread(SupportAssistant)
+    home = STATE["bots"][config.DEFAULT_TENANT] = await asyncio.to_thread(SupportAssistant)
+    STATE["answering"], STATE["llm_failures"] = await asyncio.to_thread(
+        first_answering, home.llm, home.models)
     yield
     STATE.clear()
 
@@ -105,12 +118,13 @@ def health() -> HealthResponse:
     b = bot()
     return HealthResponse(
         status="ok",
-        backend=b.backend_name,
-        has_llm=b.has_llm,
+        backend=STATE.get("answering", b.backend_name),
+        has_llm=not STATE.get("answering", b.backend_name).startswith("Extractive"),
         top_k=b.top_k,
         chunks=len(b.chunks),
         documents=list(config.SOURCE_LABELS.values()),
         database=STATE.get("database", "primary"),
+        llm_failures=STATE.get("llm_failures", []),
     )
 
 

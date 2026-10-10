@@ -75,3 +75,10 @@ def test_a_figure_the_customer_already_gave_is_not_held_against_the_answer(assis
     scripted("Being without service for 987654321 seconds is a long time.")
     turn = assistant.respond("I was without service for 987654321 seconds", [])
     assert turn["outcome"] == "answered"
+
+
+def test_model_citation_markers_never_reach_the_customer(assistant, scripted):
+    scripted("Check the plan catalog for details.【5†L1-L4】")
+    turn = assistant.respond(QUESTION, [])
+    assert "【" not in turn["answer"]
+    assert turn["outcome"] == "answered"

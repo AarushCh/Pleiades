@@ -38,6 +38,7 @@ class HealthResponse(BaseModel):
     chunks: int
     documents: list[str]
     database: str = "primary"
+    llm_failures: list[str] = []
 
 
 class ConversationOut(BaseModel):
