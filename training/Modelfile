@@ -1,11 +1,12 @@
-FROM ./pleiades-llama3.1-8b-gguf/unsloth.Q4_K_M.gguf
-TEMPLATE """{{ if .System }}<|start_header_id|>system<|end_header_id|>
-
-{{ .System }}<|eot_id|>{{ end }}{{ if .Prompt }}<|start_header_id|>user<|end_header_id|>
-
-{{ .Prompt }}<|eot_id|>{{ end }}<|start_header_id|>assistant<|end_header_id|>
-
-{{ .Response }}<|eot_id|>"""
+FROM ./build/models/pleiades-chat-4b.q8_0.gguf
+TEMPLATE """{{ if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}{{ if .Prompt }}<|im_start|>user
+{{ .Prompt }}<|im_end|>
+{{ end }}<|im_start|>assistant
+{{ .Response }}<|im_end|>
+"""
+PARAMETER stop <|im_end|>
+PARAMETER stop <|endoftext|>
 PARAMETER temperature 0.1
 PARAMETER num_ctx 8192
-PARAMETER stop <|eot_id|>

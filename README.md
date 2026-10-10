@@ -128,8 +128,13 @@ organisation, not across them.
 Each organisation gets its own Chroma collection rather than a share of one collection behind a
 filter. A bug in retrieval can't reach documents it was never indexed next to.
 
-Postgres row-level security is written and ready behind `DB_RLS=1`. It stays off until it has
-been run against a live database. `tests/test_isolation.py` covers the boundary either way.
+On Postgres the database enforces the same boundary with row-level security (`DB_RLS=1`). The
+tenant is applied at the start of every transaction, so it survives commits and works behind a
+transaction-mode pooler, and the app refuses to start if its database role could bypass the
+policies. `tests/test_isolation.py` covers the boundary in the app; two more tests run only on
+Postgres and check that the database itself hides and refuses other tenants' rows. Tests never
+touch `DATABASE_URL`: point `TEST_DATABASE_URL` at a scratch database, such as a Neon branch, to
+run them against Postgres.
 
 The `documents` table is the source of truth for the knowledge base. `python -m src.ingest`
 reads from it and falls back to `data/*.md` when the table is empty, so the corpus can be
@@ -180,14 +185,21 @@ router died 4 days after it arrived"*, which flipped the DOA answer from correct
 `.\run.ps1 eval` scores retrieval against 15 labelled questions in `eval/dataset.json`,
 three runs each because expansion is non-deterministic.
 
-| Configuration | Recall | p50 latency |
-|---|---|---|
-| Vector only | 80.0% | 12 ms |
-| With expansion and fusion | **93.3%** | ~1.0 s |
+| Configuration | Recall@6 |
+|---|---|
+| Vector only | 80.0% |
+| With expansion and fusion, qwen3.8-27b expanding | **100.0%** |
+| With expansion and fusion, gpt-oss-120b or gpt-oss-20b expanding | 86.7% |
 
-The 93.3% was measured with Llama 3.3 70B on Groq. Expansion needs a model that answers: with
-no working model it returns nothing and recall falls back to the vector-only 80.0%. A local
-Llama 3 8B reaches 86.7%, because it tends to name one section instead of writing three queries.
+Expansion is only as good as the model behind it, and with no working model it returns nothing
+and recall drops to the vector-only 80.0%.
+
+Fusion keeps the original question's top 2 hits. It used to keep 4, which cost a question: for
+*"my card was declined, how long before you cut me off?"* the expander wrote the exact heading
+of the right section, but four weak anchors filled four of the six places and pushed it to
+seventh, and the model then correctly said the context didn't cover it. Replaying the same
+expansions with 0 to 4 anchors gave 93.3%, 100%, 100%, 100% and 93.3%, so 2 sits in the middle
+of the range that works.
 
 The four cases expansion fixes are exactly the ones plain search gets wrong: the DOA clause,
 the SLA credit table, the payment-failure timeline, and the RMA escalation remedy.
@@ -216,6 +228,75 @@ correctly derived 90.4% uptime gets flagged because 90.4 doesn't appear in any s
 That's deliberate for now. The fix is to do the calculation in code and let the model explain
 the result.
 
+## Our own models
+
+Pleiades trains its own models on the tenant's documents, on one RTX 4070 SUPER, at no cost.
+
+### Training data
+
+`training/product_data.py` has qwen3.8-27b, the best model in the answer benchmark, write six
+questions per passage the way customers actually talk: symptoms instead of policy names, their
+own words instead of the document's. A question is kept only if every figure in its answer
+appears in the passage. Anything that copies or nearly copies a held-out eval question is
+dropped, and train and validation are split by section, so validation only asks about passages
+the model never trained on. The 41 Nimbus passages give 198 verified pairs.
+
+The same run builds the answering model's set: the right passage hidden among the passages
+retrieval really returns, off-topic questions that must be refused, and questions whose passage
+has been removed, kept only when the figure check proves the remaining passages can't support
+the answer, so the model isn't taught to refuse a question it could have answered.
+
+### Pleiades-Embed, the retrieval encoder
+
+`training/embed.py` fine-tunes a sentence encoder with in-batch negatives (no two questions
+about the same passage in one batch), with the mean pooling and 256-token limit Chroma uses at
+inference, and exports straight to ONNX in the layout Chroma loads. The export was checked
+against the trained model (cosine 1.000000), and an export missing any file Chroma expects is
+refused, because Chroma would quietly replace it with the stock model.
+
+The model was chosen on the validation split; the human-written eval questions were only read
+once, after choosing.
+
+| Encoder | Recall@6, unseen sections | MRR | Recall@6, held-out questions |
+|---|---|---|---|
+| all-MiniLM-L6-v2, stock (the previous default) | 79.3% | 0.675 | 80.0% |
+| bge-small-en-v1.5, stock | 82.8% | 0.684 | 80.0% |
+| **bge-small-en-v1.5, fine-tuned 8 epochs** | **93.1%** | **0.740** | **86.7%** |
+
+Most of the gain is the training rather than the base model. With query expansion on top, the
+full pipeline still finds the right passage for every held-out question. The int8 export is
+34 MB instead of 133 MB and embeds a query in 30 ms on a CPU with the same recall, so it fits a
+512 MB free instance. Point `EMBED_MODEL_DIR` at the exported folder to use it; nothing else
+changes, and it gets its own collection.
+
+### Pleiades-Chat, the answering model (in progress)
+
+`training/finetune.py` fine-tunes Qwen3-4B-Instruct-2507 (Apache-2.0) with QLoRA: 4-bit NF4
+weights, LoRA rank 16 on every linear layer, and a loss computed only over the answer tokens,
+with logits only produced for those tokens, which is what lets it train in 10 minutes inside
+12 GB. The result is converted to a q8_0 GGUF with llama.cpp's converter and served by Ollama
+(`training/Modelfile`).
+
+To judge the answering model alone, every model below got the same retrieved passages, built
+from the same query expansions, so the answer is the only thing that changes:
+
+| Answering model | Correct (17) | p50 |
+|---|---|---|
+| qwen/qwen3.8-27b on Groq | 94.1% | 0.56 s |
+| Qwen3-4B-Instruct, untrained, local | 94.1% | 1.79 s |
+| Pleiades-Chat-4B, first fine-tune, local | 70.6% | 1.01 s |
+
+The first fine-tune made the model worse. Its training answers were the short answers written
+while the questions were being generated, each from a single passage and in a different style
+from the production prompt, so it learned to be brief rather than complete. The replacement
+(`product_data.py --distill`) runs the teacher through the production pipeline itself, with the
+same prompts and the same retrieved passages, keeps only answers that pass the figure check on
+the first draft, and adds the teacher's query expansions, which is where a 4B model falls short:
+left to write its own expansions, untrained Qwen3-4B scores 76.5% end to end.
+
+Running entirely offline, with Pleiades-Embed and untrained Qwen3-4B on one GPU, Pleiades
+answers 82.4% of the benchmark correctly at a 2.3 s median.
+
 ## Token budget
 
 | Measure | Effect |
@@ -230,23 +311,53 @@ A typical grounded turn is ~900–1100 prompt tokens; the UI reports the estimat
 Query expansion adds one small call (~360 tokens of section headings in, ~40 out). Set
 `EXPAND_THRESHOLD=0` to disable it and trade recall for latency.
 
+### Answers, end to end
+
+`python eval/run_answers.py` puts each question through the whole pipeline (retrieval, draft,
+figure check) and scores the answer against facts taken from the documents, with paraphrase
+allowed, plus two off-topic questions that must be refused. Each model was run on its own with
+no fallbacks, paced under the free tier's rate limits so latency means model time.
+
+| Model on Groq | Correct (17) | p50 | p95 |
+|---|---|---|---|
+| **qwen/qwen3.8-27b** | **94.1%** | **0.56 s** | 1.36 s |
+| openai/gpt-oss-120b | 82.4% | 1.19 s | 2.34 s |
+| openai/gpt-oss-20b | 82.4% | 1.07 s | 2.29 s |
+
+Every failure was read before it counted, and two early "failures" turned out to be the eval
+being stricter than the documents, so the eval was fixed. The one question qwen gets wrong is
+the SLA credit: three days down is exactly 90.0% uptime, which earns 50%, and it chose the
+"below 90%" row. Both figures are in the source, so the figure check can't catch it; the fix is
+to do that lookup in code.
+
 ## Backends and failover
 
-Auto-detected in order: Ollama → Llama API → Groq → OpenRouter → extractive stub. Override with
-`LLM_BACKEND` in `.env`.
+Auto-detected in order: Llama API → Groq → OpenRouter → Ollama → extractive stub. Hosted models
+come first, so a local Ollama no longer quietly replaces a 27B model with an 8B one. Override
+with `LLM_BACKEND` in `.env`.
 
 | Backend | Setup | Notes |
 |---|---|---|
 | `llama-api` | `LLAMA_API_BASE`, `LLAMA_API_KEY`, `LLAMA_API_MODEL` | Any OpenAI-compatible host serving Llama 3 (Cerebras, SambaNova, NVIDIA, Together, a self-hosted vLLM). Recommended hosted default |
-| `groq` | `GROQ_API_KEY=gsk_…` | Groq has retired its Llama 3 chat models; set `GROQ_MODEL` to a model your key lists, or leave Groq as a fallback only |
-| `ollama` | `.\setup.ps1 -WithOllama` | Local Llama 3 8B, fully offline. ~7 s per answer and visibly weaker than 70B |
+| `groq` | `GROQ_API_KEY=gsk_…` | Default. `GROQ_MODEL` (qwen/qwen3.8-27b) then each of `GROQ_FALLBACK_MODELS` (gpt-oss-120b, gpt-oss-20b). Every model has its own free quota |
+| `ollama` | `.\setup.ps1 -WithOllama` | Fully offline, last in the automatic order |
 | `openrouter` | `OPENROUTER_API_KEY=sk-or-v1-…` | Free Nemotron model by default; Llama 3.3 there needs credit on the key |
 | `stub` | nothing | Extractive fallback so retrieval still demos with no model at all |
 
-Every configured backend that is not the primary becomes a LangChain fallback. If Groq returns
-a rate-limit error mid-demo, the chain retries on Ollama and then OpenRouter rather than
-failing. We hit Groq's daily token cap while benchmarking, and the failover is what kept the
-pipeline answering.
+Every configured model that is not the primary becomes a LangChain fallback, including each
+extra Groq model, so one retired or rate-limited model doesn't stop answers. That happened:
+Groq retired every Llama model this project used to run on. All three current Groq models
+reason before answering, so reasoning is set to low for gpt-oss and off for qwen; otherwise the
+thinking can use up the answer's token budget.
+
+At startup the chain is probed in order, and `/api/health` reports the model that actually
+answered, plus any that failed, not the one that was configured. The UI shows a warning when
+nothing is answering.
+
+Groq's free tier is per organisation and per model: 1,000 requests and, for qwen3.8-27b,
+200,000 tokens a day, refilled continuously. A turn costs 2,000 to 3,000 tokens, so qwen covers
+about 80 turns a day before the chain moves on to the gpt-oss models, which have their own
+allowance.
 
 `python -m src.llm` reports the live backend, makes a test call, and on an unknown-model error
 lists every model your key can actually reach.
@@ -267,8 +378,8 @@ src/app.py         Streamlit UI (alternative to the Next.js one)
 api/               FastAPI service, SSE streaming, session store
 frontend/          Next.js app router, glass design system
 tests/             61 tests, LLM-dependent ones skip unless a backend answers
-training/          project assistant: corpus, dataset, QLoRA fine-tune, evaluation
-eval/              labelled retrieval benchmark
+training/          training data, the embedder and answering-model fine-tunes, the project assistant
+eval/              retrieval benchmark (dataset.json) and answer benchmark (answers.json)
 ```
 
 ## Adding your own knowledge base
@@ -305,4 +416,4 @@ deployment and roadmap.
 | `python training/pipeline.py eval --answers` | Score on the golden set |
 | `python training/pipeline.py dataset` | Generate verified fine-tuning data |
 
-`training/finetune.py` runs QLoRA on Llama 3.1 8B on a GPU and exports a GGUF for Ollama.
+`training/finetune.py` fine-tunes the answering model; see Our own models.

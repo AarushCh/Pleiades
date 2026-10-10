@@ -63,10 +63,15 @@ def main() -> None:
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--pause", type=float, default=0.0, help="seconds between turns")
     parser.add_argument("--out", type=Path, help="write per-turn results as JSON")
+    parser.add_argument("--expansions", type=Path,
+                        help="JSON of question to queries; holds retrieval fixed so only the answer varies")
     args = parser.parse_args()
 
     cases = json.loads(CASES.read_text(encoding="utf-8"))
     bot = SupportAssistant(fallbacks=False)
+    if args.expansions:
+        fixed = json.loads(args.expansions.read_text(encoding="utf-8"))
+        bot._expand = lambda query: fixed.get(query, [])
     print(f"Model     {bot.backend_name}")
     print(f"Cases     {len(cases)} x {args.repeats}\n")
 

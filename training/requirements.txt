@@ -3,7 +3,6 @@ torch==2.11.0+cu128
 transformers==5.19.0
 sentence-transformers==6.1.0
 peft==0.21.2
-trl==1.15.0
 datasets==5.1.0
 accelerate==1.15.0
 bitsandbytes==0.50.2
@@ -12,3 +11,4 @@ onnx==1.23.2
 onnxscript==0.7.2
 onnxruntime==1.31.0
 python-dotenv==1.2.4
+sentencepiece==0.2.2
