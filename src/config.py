@@ -22,7 +22,7 @@ TOP_K = int(os.getenv("TOP_K", "6"))
 MIN_RELEVANCE = float(os.getenv("MIN_RELEVANCE", "0.12"))
 EXPAND_THRESHOLD = float(os.getenv("EXPAND_THRESHOLD", "0.75"))
 KEYWORD_BONUS = 0.06
-ANCHORS = 4
+ANCHORS = 2
 FUSION = os.getenv("FUSION", "anchored").strip().lower()
 RRF_K = int(os.getenv("RRF_K", "60"))
 

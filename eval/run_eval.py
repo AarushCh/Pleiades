@@ -36,8 +36,13 @@ def run_mode(bot: SupportAssistant, cases: list[dict], expand: bool, repeats: in
         for case in cases:
             hits = 0
             for _ in range(repeats):
-                start = time.perf_counter()
-                r = bot.retrieve(case["question"], [])
+                for wait in (0, 15, 30, 45, 60):
+                    time.sleep(wait)
+                    bot.last_error = None
+                    start = time.perf_counter()
+                    r = bot.retrieve(case["question"], [])
+                    if not (bot.last_error and "RateLimit" in bot.last_error):
+                        break
                 latencies.append((time.perf_counter() - start) * 1000)
                 hits += matched(r, case)
             rows.append({
@@ -61,7 +66,7 @@ def main() -> None:
     args = parser.parse_args()
 
     cases = json.loads(DATASET.read_text(encoding="utf-8"))
-    bot = SupportAssistant()
+    bot = SupportAssistant(fallbacks=False)
 
     print(f"Backend   {bot.backend_name}")
     print(f"Index     {len(bot.chunks)} chunks, top-{bot.top_k}, cosine")
