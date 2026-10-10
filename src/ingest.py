@@ -8,14 +8,15 @@ from langchain_core.documents import Document
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 
 from src import config
-from src.embeddings import MiniLMEmbeddings
+from src.embeddings import MiniLMEmbeddings, embedder_tag
 
 HEADERS = [("#", "doc_title"), ("##", "section"), ("###", "subsection")]
 
 
 def collection_for(tenant: str | None = None) -> str:
     slug = (tenant or config.DEFAULT_TENANT).strip().lower().replace("-", "_")
-    return f"{config.COLLECTION_NAME}_{slug}"
+    tag = embedder_tag().replace("-", "_")
+    return f"{config.COLLECTION_NAME}_{slug}" + (f"_{tag}" if tag else "")
 
 
 def load_documents(tenant: str | None = None) -> list[Document]:

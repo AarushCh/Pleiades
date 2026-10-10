@@ -94,3 +94,28 @@ def test_a_changed_chunk_is_removed_not_left_behind(tmp_path, monkeypatch):
     expected = {c.metadata["hash"] for c in ingest.split_documents(docs)}
     assert after == expected
     assert before - after
+
+
+def test_an_incomplete_trained_embedder_refuses_to_load(tmp_path, monkeypatch):
+    import pytest
+
+    from src import config, embeddings
+
+    (tmp_path / "onnx").mkdir()
+    (tmp_path / "onnx" / "model.onnx").write_bytes(b"")
+    monkeypatch.setattr(config, "EMBED_MODEL_DIR", str(tmp_path))
+    embeddings._model.cache_clear()
+    try:
+        with pytest.raises(RuntimeError, match="missing"):
+            embeddings._model()
+    finally:
+        embeddings._model.cache_clear()
+
+
+def test_each_embedder_gets_its_own_collection(monkeypatch):
+    from src import config, ingest
+
+    monkeypatch.setattr(config, "EMBED_MODEL_DIR", "")
+    stock = ingest.collection_for("nimbus")
+    monkeypatch.setattr(config, "EMBED_MODEL_DIR", "/models/pleiades-embed-v1")
+    assert ingest.collection_for("nimbus") == f"{stock}_pleiades_embed_v1"
