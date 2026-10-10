@@ -51,6 +51,7 @@ def current_tenant(
     tenant = db.scalar(select(Tenant).where(Tenant.slug == slug))
     if tenant is None:
         raise HTTPException(404, "Unknown organisation")
+    scope_to_tenant(db, tenant.id)
     return tenant
 
 

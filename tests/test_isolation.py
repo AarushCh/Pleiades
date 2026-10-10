@@ -7,9 +7,18 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from api.main import app
-from src import config
+from src import config, db
 from src.auth import create_token
-from src.db import Conversation, Document, SessionLocal, Tenant, User, ensure_tenant, seed_documents
+from src.db import (
+    Conversation,
+    Document,
+    SessionLocal,
+    Tenant,
+    User,
+    ensure_tenant,
+    scope_to_tenant,
+    seed_documents,
+)
 from src.ingest import collection_for
 
 OTHER = "acme-isolation-test"
@@ -66,9 +75,11 @@ def test_one_email_can_exist_in_two_tenants(client, tenants):
     assert home["tenant"] == tenants["home"]
     assert away["tenant"] == tenants["away"]
 
-    with SessionLocal() as s:
-        rows = s.scalars(select(User).where(User.email == email)).all()
-        assert {r.tenant_id for r in rows} == {tenants["home_id"], tenants["away_id"]}
+    for tid in (tenants["home_id"], tenants["away_id"]):
+        with SessionLocal() as s:
+            scope_to_tenant(s, tid)
+            rows = s.scalars(select(User).where(User.email == email, User.tenant_id == tid)).all()
+            assert len(rows) == 1
 
 
 def test_a_duplicate_email_inside_one_tenant_is_still_rejected(client, tenants):
@@ -98,6 +109,7 @@ def test_a_conversation_is_invisible_to_the_other_tenant(client, tenants):
     intruder = signup(client, tenants["away"], f"{uuid.uuid4().hex[:12]}@example.com")
 
     with SessionLocal() as s:
+        scope_to_tenant(s, tenants["home_id"])
         user = s.scalar(select(User).where(User.email == owner["email"]))
         convo = Conversation(tenant_id=user.tenant_id, user_id=user.id, title="Private")
         s.add(convo)
@@ -113,6 +125,7 @@ def test_a_conversation_is_invisible_to_the_other_tenant(client, tenants):
 def test_a_token_cannot_be_moved_to_another_tenant(client, tenants):
     owner = signup(client, tenants["home"], f"{uuid.uuid4().hex[:12]}@example.com")
     with SessionLocal() as s:
+        scope_to_tenant(s, tenants["home_id"])
         user = s.scalar(select(User).where(User.email == owner["email"]))
         forged = create_token(user.id, user.email, tenants["away_id"])
     res = client.get("/api/auth/me", headers={"Authorization": f"Bearer {forged}"})
@@ -123,8 +136,9 @@ def test_documents_do_not_cross_tenants(tenants):
     with SessionLocal() as s:
         written = seed_documents(s, tenants["away_id"])
         assert written >= 0
-        home = s.scalars(select(Document).where(Document.tenant_id == tenants["home_id"])).all()
         away = s.scalars(select(Document).where(Document.tenant_id == tenants["away_id"])).all()
+        scope_to_tenant(s, tenants["home_id"])
+        home = s.scalars(select(Document).where(Document.tenant_id == tenants["home_id"])).all()
         assert home and away
         assert {d.id for d in home}.isdisjoint({d.id for d in away})
 
@@ -140,3 +154,23 @@ def test_a_tenant_slug_is_unique():
         again = ensure_tenant(s, OTHER.upper())
         assert first.id == again.id
         assert s.scalar(select(Tenant).where(Tenant.slug == OTHER.upper())) is None
+
+
+@pytest.mark.skipif(not db.RLS, reason="row-level security only runs on Postgres with DB_RLS=1")
+def test_the_database_itself_hides_other_tenants_rows(client, tenants):
+    signup(client, tenants["away"], f"{uuid.uuid4().hex[:12]}@example.com")
+    with SessionLocal() as s:
+        scope_to_tenant(s, tenants["home_id"])
+        assert {u.tenant_id for u in s.scalars(select(User)).all()} <= {tenants["home_id"]}
+        assert {d.tenant_id for d in s.scalars(select(Document)).all()} <= {tenants["home_id"]}
+
+
+@pytest.mark.skipif(not db.RLS, reason="row-level security only runs on Postgres with DB_RLS=1")
+def test_the_database_refuses_a_write_into_another_tenant(tenants):
+    from sqlalchemy.exc import DBAPIError
+
+    with SessionLocal() as s:
+        scope_to_tenant(s, tenants["home_id"])
+        s.add(Document(tenant_id=tenants["away_id"], filename="planted.md", label="x", body="x"))
+        with pytest.raises(DBAPIError):
+            s.commit()

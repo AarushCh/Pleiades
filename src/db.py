@@ -12,6 +12,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     create_engine,
+    event,
     func,
     select,
     text,
@@ -155,26 +156,45 @@ def ensure_tenant(session: Session, slug: str, name: str | None = None) -> Tenan
     return row
 
 
+TENANT_SETTING = "NULLIF(current_setting('app.tenant_id', true), '')::int"
+
+
 def apply_rls(bind) -> None:
     qualified = f'"{SCHEMA}".' if SCHEMA else ""
     with bind.begin() as conn:
+        role, bypass = conn.execute(text(
+            "SELECT rolname, rolbypassrls OR rolsuper FROM pg_roles WHERE rolname = current_user")).one()
+        if bypass:
+            raise RuntimeError(
+                f"DB_RLS is on, but the database role {role!r} bypasses row-level security, so the "
+                "policies would never apply. Connect as a role without BYPASSRLS or SUPERUSER.")
         for table in TENANT_TABLES:
-            conn.execute(text(f"ALTER TABLE {qualified}\"{table}\" ENABLE ROW LEVEL SECURITY"))
-            conn.execute(text(f"ALTER TABLE {qualified}\"{table}\" FORCE ROW LEVEL SECURITY"))
+            conn.execute(text(f'ALTER TABLE {qualified}"{table}" ENABLE ROW LEVEL SECURITY'))
+            conn.execute(text(f'ALTER TABLE {qualified}"{table}" FORCE ROW LEVEL SECURITY'))
             conn.execute(text(f'DROP POLICY IF EXISTS tenant_isolation ON {qualified}"{table}"'))
             conn.execute(text(
-                f'CREATE POLICY tenant_isolation ON {qualified}"{table}" USING '
-                "(tenant_id = current_setting('app.tenant_id', true)::int) WITH CHECK "
-                "(tenant_id = current_setting('app.tenant_id', true)::int)"))
+                f'CREATE POLICY tenant_isolation ON {qualified}"{table}" '
+                f"USING (tenant_id = {TENANT_SETTING}) WITH CHECK (tenant_id = {TENANT_SETTING})"))
+
+
+def _set_tenant(connection, tenant_id: int) -> None:
+    connection.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(tenant_id)})
+
+
+@event.listens_for(Session, "after_begin")
+def _scope_each_transaction(session, transaction, connection) -> None:
+    if RLS and session.info.get("tenant_id") is not None:
+        _set_tenant(connection, session.info["tenant_id"])
 
 
 def scope_to_tenant(session: Session, tenant_id: int) -> None:
-    if RLS:
-        session.execute(text("SELECT set_config('app.tenant_id', :t, true)"),
-                        {"t": str(tenant_id)})
+    session.info["tenant_id"] = tenant_id
+    if RLS and session.in_transaction():
+        _set_tenant(session.connection(), tenant_id)
 
 
 def init_db() -> str:
+    global RLS
     try:
         if SCHEMA:
             with engine.begin() as conn:
@@ -188,6 +208,7 @@ def init_db() -> str:
     except OperationalError:
         if IS_SQLITE:
             raise
+    RLS = False
     fallback = create_engine(
         f"sqlite:///{config.ROOT / 'pleiades.db'}",
         connect_args={"check_same_thread": False},
@@ -202,6 +223,7 @@ def init_db() -> str:
 def seed_documents(session: Session, tenant_id: int | None = None) -> int:
     if tenant_id is None:
         tenant_id = ensure_tenant(session, config.DEFAULT_TENANT, config.DEFAULT_TENANT_NAME).id
+    scope_to_tenant(session, tenant_id)
     written = 0
     for path in sorted(config.DATA_DIR.glob("**/*.md")):
         body = path.read_text(encoding="utf-8")
@@ -224,6 +246,7 @@ def load_documents_from_db(tenant: str | None = None) -> list[tuple[str, str, st
         row = session.scalar(select(Tenant).where(Tenant.slug == slug))
         if row is None:
             return []
+        scope_to_tenant(session, row.id)
         rows = session.scalars(
             select(Document).where(Document.tenant_id == row.id).order_by(Document.filename)
         ).all()

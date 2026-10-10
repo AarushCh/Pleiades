@@ -179,7 +179,7 @@ async def chat(
 
     convo = _conversation(db, user, req.conversation_id)
     history = _history(convo)
-    convo_id = convo.id
+    convo_id, tenant_id = convo.id, user.tenant_id
     is_first = not convo.messages
 
     async def events():
@@ -230,6 +230,7 @@ async def chat(
 
         if answer and r is not None:
             with SessionLocal() as write:
+                scope_to_tenant(write, tenant_id)
                 convo_row = write.get(Conversation, convo_id)
                 if convo_row is not None:
                     write.add(Message(tenant_id=convo_row.tenant_id,

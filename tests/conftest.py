@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL", "")
 
 from src import config
 from src.llm import get_llm, resolve_backend
