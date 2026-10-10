@@ -100,12 +100,16 @@ def build_index(tenant: str | None = None, rebuild: bool = False) -> Chroma:
 
     store = get_vectorstore(tenant)
     existing = set(store.get(include=[])["ids"])
+    stale = existing - {c.metadata["hash"] for c in chunks}
     new = [c for c in chunks if c.metadata["hash"] not in existing]
 
+    if stale:
+        store.delete(ids=sorted(stale))
+        print(f"Removed {len(stale)} chunks whose documents changed")
     if new:
         store.add_documents(new, ids=[c.metadata["hash"] for c in new])
         print(f"Embedded and stored {len(new)} new chunks")
-    else:
+    if not stale and not new:
         print("Index already up to date")
 
     print(f"Collection '{name}' holds {store._collection.count()} chunks")

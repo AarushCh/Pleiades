@@ -317,7 +317,7 @@ async def reseed(user: User = Depends(current_user), db: Session = Depends(get_d
         raise HTTPException(403, "Admin access required")
     synced = seed_documents(db, user.tenant_id)
     slug = tenant_slug(db, user)
-    await asyncio.to_thread(build_index, slug, True)
+    await asyncio.to_thread(build_index, slug)
     fresh = await asyncio.to_thread(SupportAssistant, slug)
     STATE["bots"][slug] = fresh
     return {"synced": synced, "chunks": len(fresh.chunks)}

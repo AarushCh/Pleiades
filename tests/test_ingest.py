@@ -57,3 +57,40 @@ def test_unreachable_database_falls_back_to_sqlite():
                          capture_output=True, text=True, timeout=60)
     assert run.returncode == 0, run.stderr
     assert run.stdout.strip().isdigit()
+
+
+def test_a_rebuild_keeps_the_collection_that_live_readers_hold(tmp_path, monkeypatch):
+    from src import config, ingest
+
+    monkeypatch.setattr(config, "CHROMA_DIR", tmp_path)
+    monkeypatch.setattr(config, "KB_FROM_DB", False)
+    reader = ingest.get_vectorstore("sync-test")
+    first = ingest.build_index("sync-test")
+    held_id = reader._collection.id
+
+    docs = ingest.load_documents("sync-test")
+    docs[0].page_content += "\n\n## Added later\nA brand new section about refunds."
+    monkeypatch.setattr(ingest, "load_documents", lambda tenant=None: docs)
+    ingest.build_index("sync-test")
+
+    assert reader._collection.id == held_id
+    assert reader.similarity_search("brand new section about refunds", k=1)
+    assert first._collection.count() == reader._collection.count()
+
+
+def test_a_changed_chunk_is_removed_not_left_behind(tmp_path, monkeypatch):
+    from src import config, ingest
+
+    monkeypatch.setattr(config, "CHROMA_DIR", tmp_path)
+    monkeypatch.setattr(config, "KB_FROM_DB", False)
+    store = ingest.build_index("stale-test")
+    before = set(store.get(include=[])["ids"])
+
+    docs = ingest.load_documents("stale-test")
+    docs[0].page_content = docs[0].page_content.replace("#", "# Edited:", 1)
+    monkeypatch.setattr(ingest, "load_documents", lambda tenant=None: docs)
+    after = set(ingest.build_index("stale-test").get(include=[])["ids"])
+
+    expected = {c.metadata["hash"] for c in ingest.split_documents(docs)}
+    assert after == expected
+    assert before - after
