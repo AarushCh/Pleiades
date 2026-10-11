@@ -17,10 +17,9 @@ COOKIE = "pleiades_session"
 
 
 def client_ip(request: Request) -> str:
-    if config.TRUST_PROXY:
-        forwarded = request.headers.get("x-forwarded-for", "")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
+    chain = [ip.strip() for ip in request.headers.get("x-forwarded-for", "").split(",") if ip.strip()]
+    if config.PROXY_HOPS and chain:
+        return chain[-min(config.PROXY_HOPS, len(chain))]
     return request.client.host if request.client else "unknown"
 
 

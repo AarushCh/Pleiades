@@ -38,6 +38,7 @@ TOKEN_DAYS = int(os.getenv("TOKEN_DAYS", "7"))
 CHAT_DAILY_LIMIT = int(os.getenv("CHAT_DAILY_LIMIT", "30"))
 CORS_ORIGINS = [o for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o]
 TRUST_PROXY = os.getenv("TRUST_PROXY", "").strip().lower() in {"1", "true", "yes"}
+PROXY_HOPS = int(os.getenv("PROXY_HOPS", "2")) if TRUST_PROXY else 0
 
 LLM_BACKEND = os.getenv("LLM_BACKEND", "auto").lower()
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.1"))

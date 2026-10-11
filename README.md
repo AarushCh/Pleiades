@@ -97,6 +97,7 @@ Point Render at the repo and set these:
 | `JWT_SECRET` | generated automatically by `render.yaml` |
 | `CORS_ORIGINS` | your deployed origin, only if the UI is hosted separately |
 | `CHAT_DAILY_LIMIT` | questions per account in any 24 hours, defaults to 30; admins are exempt |
+| `TRUST_PROXY`, `PROXY_HOPS` | `1` and `2` on Render. Rate limits key on the client's address, and Render's proxy appends to `X-Forwarded-For` instead of replacing it, so the first entry is whatever the client wrote; the real one is `PROXY_HOPS` from the right |
 
 The Dockerfile builds the Next.js UI, installs the API, bakes the vector index into the image,
 and honours the platform's `$PORT`. One container serves the API and the UI, so no CORS setup is

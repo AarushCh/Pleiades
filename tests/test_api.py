@@ -47,6 +47,23 @@ def test_credential_validation():
     assert validate_credentials("a@b.co", "correct-horse") is None
 
 
+def test_client_ip_is_the_one_the_proxies_saw_not_the_one_the_client_wrote(monkeypatch):
+    from starlette.requests import Request
+
+    from api.deps import client_ip
+
+    def seen(forwarded: str) -> str:
+        headers = [(b"x-forwarded-for", forwarded.encode())] if forwarded else []
+        return client_ip(Request({"type": "http", "headers": headers, "client": ("10.0.0.9", 443)}))
+
+    monkeypatch.setattr(config, "PROXY_HOPS", 2)
+    assert seen("203.0.113.7, 10.0.0.1") == "203.0.113.7"
+    assert seen("6.6.6.6, 203.0.113.7, 10.0.0.1") == "203.0.113.7"
+    assert seen("203.0.113.7") == "203.0.113.7"
+    monkeypatch.setattr(config, "PROXY_HOPS", 0)
+    assert seen("6.6.6.6, 203.0.113.7, 10.0.0.1") == "10.0.0.9"
+
+
 def test_signup_is_rate_limited(client):
     from api.deps import _HITS
 
