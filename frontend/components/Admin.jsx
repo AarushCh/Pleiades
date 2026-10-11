@@ -102,7 +102,7 @@ export default function Admin() {
             Not helpful ({complaints?.length ?? 0})
           </button>
           {tab === "complaints" && complaints?.length > 0 && (
-            <button className="tab details__timing" onClick={() => download(complaints)}>
+            <button className="tab tab--end" onClick={() => download(complaints)}>
               Download as benchmark cases
             </button>
           )}
