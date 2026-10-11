@@ -274,6 +274,21 @@ def scope_to_tenant(session: Session, tenant_id: int) -> None:
         _set_tenant(session.connection(), tenant_id)
 
 
+class SchemaMismatch(Exception):
+    pass
+
+
+def missing_columns(bind) -> list[str]:
+    with bind.connect() as conn:
+        schema, found = _schema_for(conn), inspect(conn)
+        gaps = []
+        for table in Base.metadata.sorted_tables:
+            have = ({c["name"] for c in found.get_columns(table.name, schema=schema)}
+                    if found.has_table(table.name, schema=schema) else set())
+            gaps += [f"{table.name}.{c.name}" for c in table.columns if c.name not in have]
+        return gaps
+
+
 def init_db() -> str:
     global RLS
     try:
@@ -287,12 +302,17 @@ def init_db() -> str:
         else:
             create_schema(engine)
             migrate(engine)
+            gaps = missing_columns(engine)
+            if gaps:
+                raise SchemaMismatch(f"its tables lack {', '.join(gaps[:6])}")
         with SessionLocal() as session:
             ensure_tenant(session, config.DEFAULT_TENANT, config.DEFAULT_TENANT_NAME)
         return "primary"
-    except OperationalError:
+    except (OperationalError, SchemaMismatch) as exc:
         if IS_SQLITE:
             raise
+        print(f"Primary database unusable ({type(exc).__name__}: {str(exc).splitlines()[0][:200]}); "
+              "serving from a local SQLite fallback", flush=True)
     RLS = False
     fallback = create_engine(
         f"sqlite:///{config.ROOT / 'pleiades.db'}",
