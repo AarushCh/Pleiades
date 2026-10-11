@@ -31,6 +31,11 @@ def client():
 
 
 @pytest.fixture(autouse=True)
+def _no_carried_cookies(client):
+    client.cookies.clear()
+
+
+@pytest.fixture(autouse=True)
 def _fresh_rate_limit():
     from api.deps import _HITS
 

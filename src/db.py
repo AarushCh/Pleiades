@@ -103,6 +103,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), index=True)
     name: Mapped[str] = mapped_column(String(120))
     password_hash: Mapped[str] = mapped_column(String(255))
+    session_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     conversations: Mapped[list[Conversation]] = relationship(

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.deps import client_ip, current_tenant, current_user, get_db, rate_limit
+from api.deps import COOKIE, client_ip, current_tenant, current_user, get_db, rate_limit
+from src import config
 from src.auth import create_token, hash_password, validate_credentials, verify_password
 from src.db import Tenant, User
 
@@ -31,8 +32,20 @@ class AuthResponse(BaseModel):
     tenant: str
 
 
+def https(request: Request) -> bool:
+    forwarded = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+    return request.url.scheme == "https" or (config.TRUST_PROXY and forwarded == "https")
+
+
+def start_session(request: Request, response: Response, user: User, tenant: Tenant) -> AuthResponse:
+    token = create_token(user.id, user.email, tenant.id, user.session_version)
+    response.set_cookie(COOKIE, token, max_age=config.TOKEN_DAYS * 86400, path="/api", httponly=True,
+                        samesite="strict", secure=https(request))
+    return AuthResponse(token=token, name=user.name, email=user.email, tenant=tenant.slug)
+
+
 @router.post("/signup", response_model=AuthResponse)
-def signup(req: SignupRequest, request: Request, db: Session = Depends(get_db),
+def signup(req: SignupRequest, request: Request, response: Response, db: Session = Depends(get_db),
            tenant: Tenant = Depends(current_tenant)) -> AuthResponse:
     rate_limit(f"signup:{client_ip(request)}", 10, 900)
     email = req.email.strip().lower()
@@ -50,12 +63,11 @@ def signup(req: SignupRequest, request: Request, db: Session = Depends(get_db),
         raise HTTPException(409, "An account with that email already exists") from None
 
     db.refresh(user)
-    return AuthResponse(token=create_token(user.id, user.email, tenant.id), name=user.name,
-                        email=user.email, tenant=tenant.slug)
+    return start_session(request, response, user, tenant)
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(req: LoginRequest, request: Request, db: Session = Depends(get_db),
+def login(req: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db),
           tenant: Tenant = Depends(current_tenant)) -> AuthResponse:
     email = req.email.strip().lower()
     rate_limit(f"login:{client_ip(request)}", 10, 300)
@@ -63,8 +75,7 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db),
     user = db.scalar(select(User).where(User.tenant_id == tenant.id, User.email == email))
     if user is None or not verify_password(req.password, user.password_hash):
         raise HTTPException(401, "Email or password is incorrect")
-    return AuthResponse(token=create_token(user.id, user.email, tenant.id), name=user.name,
-                        email=user.email, tenant=tenant.slug)
+    return start_session(request, response, user, tenant)
 
 
 @router.get("/me", response_model=AuthResponse)
@@ -72,3 +83,11 @@ def me(user: User = Depends(current_user), db: Session = Depends(get_db)) -> Aut
     tenant = db.get(Tenant, user.tenant_id)
     return AuthResponse(token="", name=user.name, email=user.email,
                         tenant=tenant.slug if tenant else "")
+
+
+@router.post("/logout")
+def logout(response: Response, user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    user.session_version += 1
+    db.commit()
+    response.delete_cookie(COOKIE, path="/api")
+    return {"signed_out": True}

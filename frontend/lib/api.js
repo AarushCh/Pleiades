@@ -11,7 +11,10 @@ export function readSession() {
 }
 
 export function writeSession(session) {
-  if (session) localStorage.setItem(KEY, JSON.stringify(session));
+  if (session) {
+    const { name, email, tenant } = session;
+    localStorage.setItem(KEY, JSON.stringify({ name, email, tenant }));
+  }
   else localStorage.removeItem(KEY);
 }
 
@@ -20,17 +23,11 @@ function expireSession() {
   window.location.reload();
 }
 
-function authHeaders() {
-  const s = readSession();
-  return s?.token ? { Authorization: `Bearer ${s.token}` } : {};
-}
-
 async function jsonFetch(path, options = {}) {
   const res = await fetch(BASE + path, {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...authHeaders(),
       ...(options.headers || {}),
     },
   });
@@ -47,6 +44,7 @@ export const login = (payload) =>
   jsonFetch("/api/auth/login", { method: "POST", body: JSON.stringify(payload) });
 
 export const getMe = () => jsonFetch("/api/auth/me");
+export const logout = () => jsonFetch("/api/auth/logout", { method: "POST" });
 export const getHealth = () => jsonFetch("/api/health");
 export const listConversations = () => jsonFetch("/api/conversations");
 export const getConversation = (id) => jsonFetch(`/api/conversations/${id}`);
@@ -64,7 +62,7 @@ export async function streamChat({
 }) {
   const res = await fetch(`${BASE}/api/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question, conversation_id: conversationId }),
     signal,
   });

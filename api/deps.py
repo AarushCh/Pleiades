@@ -4,7 +4,7 @@ import time
 from collections import deque
 from collections.abc import Generator
 
-from fastapi import Depends, Header, HTTPException, Request
+from fastapi import Cookie, Depends, Header, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,7 @@ from src.auth import decode_token
 from src.db import SessionLocal, Tenant, User, scope_to_tenant
 
 _HITS: dict[str, deque[float]] = {}
+COOKIE = "pleiades_session"
 
 
 def client_ip(request: Request) -> str:
@@ -57,21 +58,27 @@ def current_tenant(
 
 def current_user(
     authorization: str | None = Header(default=None),
+    session: str | None = Cookie(default=None, alias=COOKIE),
     db: Session = Depends(get_db),
 ) -> User:
-    if not authorization or not authorization.lower().startswith("bearer "):
+    bearer = authorization and authorization.lower().startswith("bearer ")
+    token = authorization.split(" ", 1)[1].strip() if bearer else session
+    if not token:
         raise HTTPException(401, "Not authenticated")
 
-    payload = decode_token(authorization.split(" ", 1)[1].strip())
+    payload = decode_token(token)
     if not payload:
         raise HTTPException(401, "Session expired, sign in again")
 
     try:
         tenant_id = int(payload["tid"])
+        version = int(payload.get("ver", 1))
         scope_to_tenant(db, tenant_id)
         user = db.get(User, int(payload["sub"]))
     except (KeyError, TypeError, ValueError):
         raise HTTPException(401, "Session expired, sign in again") from None
     if user is None or user.tenant_id != tenant_id:
         raise HTTPException(401, "Account no longer exists")
+    if version != user.session_version:
+        raise HTTPException(401, "Session expired, sign in again")
     return user

@@ -2,7 +2,7 @@ import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.runtime.migration import MigrationContext
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 
 from src import db
 
@@ -23,4 +23,5 @@ def test_a_database_made_before_migrations_is_adopted(tmp_path):
         command.upgrade(db.alembic_config(conn), "0001")
         conn.exec_driver_sql("DROP TABLE alembic_version")
     db.migrate(engine)
+    assert "session_version" in {c["name"] for c in inspect(engine).get_columns("users")}
     assert db.revision(engine) == db.head()

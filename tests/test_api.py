@@ -17,6 +17,11 @@ def client():
         yield c
 
 
+@pytest.fixture(autouse=True)
+def _no_carried_cookies(client):
+    client.cookies.clear()
+
+
 @pytest.fixture(scope="module")
 def account(client):
     email = f"{uuid.uuid4().hex[:12]}@example.com"
@@ -217,3 +222,22 @@ def test_daily_chat_quota(client, monkeypatch):
 
     assert ask() == 200
     assert ask() == 429
+
+
+def test_sign_in_sets_a_session_cookie_scripts_cannot_read(client, account):
+    res = client.post("/api/auth/login", json={"email": account["email"], "password": "correct-horse"})
+    cookie = res.headers["set-cookie"].lower()
+    for part in ("pleiades_session=", "httponly", "samesite=strict", "path=/api"):
+        assert part in cookie
+
+
+def test_sign_out_revokes_the_cookie_and_every_earlier_token(client):
+    body = client.post(
+        "/api/auth/signup",
+        json={"name": "Out", "email": f"{uuid.uuid4().hex[:12]}@example.com", "password": "correct-horse"},
+    ).json()
+    earlier = {"Authorization": f"Bearer {body['token']}"}
+    assert client.get("/api/auth/me").status_code == 200
+    assert client.post("/api/auth/logout").status_code == 200
+    assert client.get("/api/auth/me").status_code == 401
+    assert client.get("/api/auth/me", headers=earlier).status_code == 401

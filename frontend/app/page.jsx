@@ -7,6 +7,7 @@ import {
   getHealth,
   getMe,
   listConversations,
+  logout,
   readSession,
   streamChat,
   writeSession,
@@ -198,6 +199,7 @@ export default function Page() {
   };
 
   const signOut = () => {
+    logout().catch(() => {});
     writeSession(null);
     setSession(null);
     setMessages([]);
