@@ -68,17 +68,22 @@ single port. `npm run dev` instead runs Next on `:5173` and proxies `/api` to `:
 
 Two services. Both have usable free tiers.
 
-**1. Database: Supabase** (Neon works unchanged; the schema is plain Postgres)
-Create a project, copy the connection string from Settings → Database, and set it as
-`DATABASE_URL`. Run `python -m src.db` once to create the schema and seed the documents table.
-Without `DATABASE_URL` the app falls back to a local SQLite file, so development needs no setup.
+**1. Database: Neon** (any Postgres works; Neon's free tier suspends when idle instead of pausing)
+Put the owner's connection string in `.env` as `DATABASE_ADMIN_URL` and run
+`python -m src.db setup` once. It creates the schema and tables, turns on row-level security,
+creates a `pleiades_app` role that can read and write rows but can't bypass the policies or
+change the schema, seeds the documents, and writes that role's connection string into `.env` as
+`DATABASE_URL`, so it never has to be shown. The app runs as that role. Run setup again after a
+schema change; it is safe to repeat. Without `DATABASE_URL` the app falls back to a local SQLite
+file, so development needs no setup.
 
 **2. App: Render** (`render.yaml` is committed; Railway and Fly.io work the same way)
 Point Render at the repo and set these:
 
 | Variable | Value |
 |---|---|
-| `DATABASE_URL` | Supabase connection string |
+| `DATABASE_URL` | the `pleiades_app` connection string that setup wrote to `.env` |
+| `DB_RLS` | `1`, so the app checks that row-level security is enforced before it serves |
 | `DB_SCHEMA` | Postgres schema, defaults to `pleiades` |
 | `GROQ_API_KEY` | from console.groq.com/keys |
 | `JWT_SECRET` | generated automatically by `render.yaml` |
@@ -130,11 +135,16 @@ filter. A bug in retrieval can't reach documents it was never indexed next to.
 
 On Postgres the database enforces the same boundary with row-level security (`DB_RLS=1`). The
 tenant is applied at the start of every transaction, so it survives commits and works behind a
-transaction-mode pooler, and the app refuses to start if its database role could bypass the
-policies. `tests/test_isolation.py` covers the boundary in the app; two more tests run only on
+transaction-mode pooler. The role a hosted database gives you often can't be held to the
+policies: Neon's `neondb_owner` has `BYPASSRLS`, so policies would simply not apply to it. That is
+why setup creates a separate runtime role, and why the app refuses to start when its role could
+bypass the policies or any tenant table isn't enforcing them. `tests/test_isolation.py` covers the boundary in the app; two more tests run only on
 Postgres and check that the database itself hides and refuses other tenants' rows. Tests never
-touch `DATABASE_URL`: point `TEST_DATABASE_URL` at a scratch database, such as a Neon branch, to
-run them against Postgres.
+touch `DATABASE_URL`. To run them against Postgres, give them a schema of their own with
+`DB_SCHEMA=pleiades_test python -m src.db setup`, then run pytest with
+`TEST_DATABASE_URL=<the app role's string> DB_SCHEMA=pleiades_test DB_RLS=1`. On Neon, all of
+the isolation and API tests pass that way, and removing the policy from a single table stops the
+app from starting.
 
 The `documents` table is the source of truth for the knowledge base. `python -m src.ingest`
 reads from it and falls back to `data/*.md` when the table is empty, so the corpus can be

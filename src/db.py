@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import os
+import re
+import secrets
+import sys
 from datetime import UTC, datetime
+from urllib.parse import urlsplit, urlunsplit
 
 from sqlalchemy import (
     DateTime,
@@ -25,8 +29,10 @@ from src import config
 
 def database_url() -> str:
     url = os.getenv("DATABASE_URL", "").strip()
-    if not url:
-        return f"sqlite:///{config.ROOT / 'pleiades.db'}"
+    return normalised(url) if url else f"sqlite:///{config.ROOT / 'pleiades.db'}"
+
+
+def normalised(url: str) -> str:
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+psycopg://", 1)
     elif url.startswith("postgresql://"):
@@ -157,17 +163,20 @@ def ensure_tenant(session: Session, slug: str, name: str | None = None) -> Tenan
 
 
 TENANT_SETTING = "NULLIF(current_setting('app.tenant_id', true), '')::int"
+APP_ROLE = os.getenv("DB_APP_ROLE", "pleiades_app")
+
+
+def create_schema(bind) -> None:
+    if SCHEMA:
+        with bind.begin() as conn:
+            if conn.execute(text("SELECT 1 FROM pg_namespace WHERE nspname = :s"), {"s": SCHEMA}).first() is None:
+                conn.execute(text(f'CREATE SCHEMA "{SCHEMA}"'))
+    Base.metadata.create_all(bind)
 
 
 def apply_rls(bind) -> None:
     qualified = f'"{SCHEMA}".' if SCHEMA else ""
     with bind.begin() as conn:
-        role, bypass = conn.execute(text(
-            "SELECT rolname, rolbypassrls OR rolsuper FROM pg_roles WHERE rolname = current_user")).one()
-        if bypass:
-            raise RuntimeError(
-                f"DB_RLS is on, but the database role {role!r} bypasses row-level security, so the "
-                "policies would never apply. Connect as a role without BYPASSRLS or SUPERUSER.")
         for table in TENANT_TABLES:
             conn.execute(text(f'ALTER TABLE {qualified}"{table}" ENABLE ROW LEVEL SECURITY'))
             conn.execute(text(f'ALTER TABLE {qualified}"{table}" FORCE ROW LEVEL SECURITY'))
@@ -175,6 +184,38 @@ def apply_rls(bind) -> None:
             conn.execute(text(
                 f'CREATE POLICY tenant_isolation ON {qualified}"{table}" '
                 f"USING (tenant_id = {TENANT_SETTING}) WITH CHECK (tenant_id = {TENANT_SETTING})"))
+
+
+def grant_app_role(bind, role: str) -> None:
+    with bind.begin() as conn:
+        for statement in (
+            f'GRANT USAGE ON SCHEMA "{SCHEMA}" TO "{role}"',
+            f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "{SCHEMA}" TO "{role}"',
+            f'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA "{SCHEMA}" TO "{role}"',
+            f'ALTER DEFAULT PRIVILEGES IN SCHEMA "{SCHEMA}" GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{role}"',
+            f'ALTER DEFAULT PRIVILEGES IN SCHEMA "{SCHEMA}" GRANT USAGE, SELECT ON SEQUENCES TO "{role}"',
+        ):
+            conn.execute(text(statement))
+
+
+def verify_rls(bind) -> None:
+    with bind.connect() as conn:
+        role, bypass = conn.execute(text(
+            "SELECT rolname, rolbypassrls OR rolsuper FROM pg_roles WHERE rolname = current_user")).one()
+        if bypass:
+            raise RuntimeError(
+                f"DB_RLS is on, but the database role {role!r} bypasses row-level security, so the "
+                "policies would never apply. Connect as the app role that `python -m src.db setup` creates.")
+        enforced = {name for name, on, forced, policy in conn.execute(text(
+            "SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, EXISTS (SELECT 1 FROM pg_policies p "
+            "WHERE p.schemaname = n.nspname AND p.tablename = c.relname AND p.policyname = 'tenant_isolation') "
+            "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = :s AND c.relname = ANY(:t)"), {"s": SCHEMA, "t": list(TENANT_TABLES)})
+            if on and forced and policy}
+    missing = [t for t in TENANT_TABLES if t not in enforced]
+    if missing:
+        raise RuntimeError(f"Row-level security is not enforced on {missing}. Run `python -m src.db setup` "
+                           "with DATABASE_ADMIN_URL set to the database owner's connection string.")
 
 
 def _set_tenant(connection, tenant_id: int) -> None:
@@ -196,12 +237,9 @@ def scope_to_tenant(session: Session, tenant_id: int) -> None:
 def init_db() -> str:
     global RLS
     try:
-        if SCHEMA:
-            with engine.begin() as conn:
-                conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{SCHEMA}"'))
-        Base.metadata.create_all(engine)
+        create_schema(engine)
         if RLS:
-            apply_rls(engine)
+            verify_rls(engine)
         with SessionLocal() as session:
             ensure_tenant(session, config.DEFAULT_TENANT, config.DEFAULT_TENANT_NAME)
         return "primary"
@@ -264,7 +302,45 @@ def stats() -> dict:
         }
 
 
-if __name__ == "__main__":
+def setup(admin_url: str) -> str | None:
+    admin = create_engine(normalised(admin_url), connect_args=_connect_args())
+    create_schema(admin)
+    apply_rls(admin)
+    password = None
+    with admin.begin() as conn:
+        if conn.execute(text("SELECT 1 FROM pg_roles WHERE rolname = :r"), {"r": APP_ROLE}).first() is None:
+            password = secrets.token_urlsafe(32)
+            if not re.fullmatch(r"[A-Za-z0-9_-]+", password):
+                raise RuntimeError("Generated password has unexpected characters")
+            conn.execute(text(f'CREATE ROLE "{APP_ROLE}" LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD '
+                              + f"'{password}'"))
+    grant_app_role(admin, APP_ROLE)
+    with sessionmaker(bind=admin, expire_on_commit=False)() as session:
+        seed_documents(session, ensure_tenant(session, config.DEFAULT_TENANT, config.DEFAULT_TENANT_NAME).id)
+    if password is None:
+        return None
+    parts = urlsplit(admin_url)
+    host = parts.hostname + (f":{parts.port}" if parts.port else "")
+    return urlunsplit(parts._replace(netloc=f"{APP_ROLE}:{password}@{host}"))
+
+
+def write_env(key: str, value: str) -> None:
+    path = config.ROOT / ".env"
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    lines = [line for line in lines if not line.startswith(f"{key}=")] + [f"{key}={value}"]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+if __name__ == "__main__" and sys.argv[1:] == ["setup"]:
+    owner = os.getenv("DATABASE_ADMIN_URL", "").strip()
+    if not owner:
+        raise SystemExit("Set DATABASE_ADMIN_URL to the database owner's connection string")
+    app_url = setup(owner)
+    if app_url:
+        write_env("DATABASE_URL", app_url)
+        print(f"Created role {APP_ROLE}; its connection string is now DATABASE_URL in .env")
+    print(f"Schema '{SCHEMA}': tables, row-level security, grants to {APP_ROLE} and documents are in place")
+elif __name__ == "__main__":
     init_db()
     with SessionLocal() as s:
         n = seed_documents(s)
