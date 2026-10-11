@@ -13,6 +13,7 @@ from src.auth import decode_token
 from src.db import SessionLocal, Tenant, User, scope_to_tenant
 
 _HITS: dict[str, deque[float]] = {}
+_SWEPT = [0.0]
 COOKIE = "pleiades_session"
 
 
@@ -25,8 +26,10 @@ def client_ip(request: Request) -> str:
 
 def rate_limit(key: str, limit: int, window: float) -> None:
     clock = time.monotonic()
-    if len(_HITS) > 10_000:
-        _HITS.clear()
+    if clock - _SWEPT[0] > 60:
+        _SWEPT[0] = clock
+        for stale in [k for k, hits in list(_HITS.items()) if not hits or clock - hits[-1] > 3600]:
+            _HITS.pop(stale, None)
     hits = _HITS.setdefault(key, deque())
     while hits and clock - hits[0] > window:
         hits.popleft()

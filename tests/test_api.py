@@ -64,6 +64,21 @@ def test_client_ip_is_the_one_the_proxies_saw_not_the_one_the_client_wrote(monke
     assert seen("6.6.6.6, 203.0.113.7, 10.0.0.1") == "10.0.0.9"
 
 
+def test_flooding_the_limiter_resets_no_one():
+    from fastapi import HTTPException
+
+    from api import deps
+
+    deps._HITS.clear()
+    for _ in range(5):
+        deps.rate_limit("victim", 5, 60)
+    for i in range(20_000):
+        deps.rate_limit(f"junk{i}", 5, 60)
+    with pytest.raises(HTTPException):
+        deps.rate_limit("victim", 5, 60)
+    deps._HITS.clear()
+
+
 def test_signup_is_rate_limited(client):
     from api.deps import _HITS
 
