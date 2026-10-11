@@ -288,6 +288,7 @@ async def chat(
                         sources=json.dumps(b.sources(r), ensure_ascii=False),
                         prompt_tokens=tokens,
                         latency_ms=elapsed,
+                        outcome=turn.get("outcome"),
                     )
                     write.add(reply)
                     if is_first:
@@ -344,6 +345,7 @@ def get_conversation(
             prompt_tokens=m.prompt_tokens,
             latency_ms=m.latency_ms,
             rating=m.rating,
+            outcome=m.outcome,
         )
         for m in convo.messages
     ]
@@ -374,10 +376,7 @@ def rate(message_id: int, req: FeedbackRequest, user: User = Depends(current_use
     return {"rated": message_id}
 
 
-@app.get("/api/admin/feedback")
-def triage(user: User = Depends(admin_user), db: Session = Depends(get_db)) -> list[dict]:
-    rows = db.scalars(select(Message).where(Message.tenant_id == user.tenant_id, Message.rating == -1)
-                      .order_by(Message.id.desc()).limit(100)).all()
+def _queue(db: Session, rows) -> list[dict]:
     return [{
         "id": m.id,
         "question": db.scalar(select(Message.content).where(
@@ -385,9 +384,45 @@ def triage(user: User = Depends(admin_user), db: Session = Depends(get_db)) -> l
             .order_by(Message.id.desc()).limit(1)),
         "answer": m.content,
         "reason": m.feedback,
+        "email": m.conversation.user.email,
         "sources": json.loads(m.sources) if m.sources else [],
         "created_at": m.created_at,
     } for m in rows]
+
+
+@app.get("/api/admin/feedback")
+def triage(user: User = Depends(admin_user), db: Session = Depends(get_db)) -> list[dict]:
+    return _queue(db, db.scalars(select(Message).where(Message.tenant_id == user.tenant_id, Message.rating == -1)
+                                 .order_by(Message.id.desc()).limit(100)).all())
+
+
+@app.get("/api/admin/handovers")
+def handovers(user: User = Depends(admin_user), db: Session = Depends(get_db)) -> list[dict]:
+    return _queue(db, db.scalars(select(Message).where(
+        Message.tenant_id == user.tenant_id, Message.outcome == "escalated")
+        .order_by(Message.id.desc()).limit(100)).all())
+
+
+@app.get("/api/admin/overview")
+def overview(days: int = 7, user: User = Depends(admin_user), db: Session = Depends(get_db)) -> dict:
+    days = max(1, min(days, 90))
+    recent = (Message.tenant_id == user.tenant_id, Message.role == "assistant",
+              Message.created_at >= now() - timedelta(days=days))
+    counts = {"questions": 0, "handed_over": 0, "helpful": 0, "not_helpful": 0}
+    for outcome, rating, n in db.execute(select(Message.outcome, Message.rating, func.count())
+                                         .where(*recent).group_by(Message.outcome, Message.rating)):
+        counts["questions"] += n
+        counts["handed_over"] += n if outcome == "escalated" else 0
+        counts["helpful"] += n if rating == 1 else 0
+        counts["not_helpful"] += n if rating == -1 else 0
+    people = db.scalar(select(func.count(func.distinct(Conversation.user_id)))
+                       .join(Message, Message.conversation_id == Conversation.id).where(*recent)) or 0
+    return {"days": days, **counts, "answered": counts["questions"] - counts["handed_over"], "people": people}
+
+
+@app.get("/api/admin/join-code")
+def join_code(user: User = Depends(admin_user), db: Session = Depends(get_db)) -> dict:
+    return {"join_code": db.get(Tenant, user.tenant_id).join_code}
 
 
 @app.post("/api/admin/join-code")

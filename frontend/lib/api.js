@@ -49,6 +49,12 @@ export const logout = () => jsonFetch("/api/auth/logout", { method: "POST" });
 export const rateAnswer = (id, rating, reason) =>
   jsonFetch(`/api/messages/${id}/feedback`, { method: "POST", body: JSON.stringify({ rating, reason }) });
 export const getHealth = () => jsonFetch("/api/health");
+export const getOverview = () => jsonFetch("/api/admin/overview");
+export const getComplaints = () => jsonFetch("/api/admin/feedback");
+export const getHandovers = () => jsonFetch("/api/admin/handovers");
+export const getJoinCode = () => jsonFetch("/api/admin/join-code");
+export const setInviteOnly = (on) => jsonFetch("/api/admin/join-code", { method: on ? "POST" : "DELETE" });
+export const reseed = () => jsonFetch("/api/admin/reseed", { method: "POST" });
 export const listConversations = () => jsonFetch("/api/conversations");
 export const getConversation = (id) => jsonFetch(`/api/conversations/${id}`);
 export const deleteConversation = (id) =>

@@ -364,3 +364,35 @@ def test_pages_and_api_carry_security_headers(client):
         assert "frame-ancestors 'none'" in policy and "unsafe-inline" not in policy.split("style-src")[0]
         assert headers["x-content-type-options"] == "nosniff"
         assert headers["strict-transport-security"].startswith("max-age=")
+
+
+def test_handovers_reach_the_admin_queue_and_the_overview(client, account, promote, monkeypatch):
+    import api.main as main
+    from src.graph import ESCALATION
+
+    graph = main.STATE["bots"][config.DEFAULT_TENANT].graph
+    real = graph.stream
+
+    def handed_over(state, stream_mode):
+        for update in real(state, stream_mode=stream_mode):
+            yield {"escalate": {"answer": ESCALATION, "outcome": "escalated"}} if "finish" in update else update
+
+    monkeypatch.setattr(graph, "stream", handed_over)
+    assert client.get("/api/admin/handovers", headers=account["headers"]).status_code == 403
+    assert client.get("/api/admin/overview", headers=account["headers"]).status_code == 403
+    promote(account["email"])
+
+    done = ask(client, account["headers"], "My router is smoking, what now?")
+    assert done["outcome"] == "escalated"
+    stored = client.get(f"/api/conversations/{done['conversation_id']}", headers=account["headers"]).json()
+    assert stored[-1]["outcome"] == "escalated"
+
+    [newest, *_] = client.get("/api/admin/handovers", headers=account["headers"]).json()
+    assert newest["id"] == done["message_id"]
+    assert newest["email"] == account["email"]
+    assert newest["question"] == "My router is smoking, what now?"
+
+    stats = client.get("/api/admin/overview", headers=account["headers"]).json()
+    assert stats["handed_over"] >= 1
+    assert stats["answered"] == stats["questions"] - stats["handed_over"]
+    assert stats["people"] >= 1

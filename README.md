@@ -153,6 +153,13 @@ with any address. Sign up first, then grant it from a machine holding the databa
 `python -m src.db admin you@example.com` (add an organisation slug for another organisation, and
 `off` to take it away).
 
+Admins get an **Admin console** in the sidebar: the last 7 days at a glance (questions, how many
+were answered without a person, how many were handed over, helpful and not helpful, how many
+people asked), the handover queue (every question the figure check passed to a person, with who
+asked it, at `GET /api/admin/handovers`), the complaints, sign-up access, and an index rebuild.
+Each answer's outcome is stored with it, and a handed-over answer tells the customer it went to
+the support team.
+
 ### Organisations
 
 One deployment serves many organisations, and none of them can see another's data. Every row in

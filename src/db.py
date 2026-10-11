@@ -148,6 +148,7 @@ class Message(Base):
     latency_ms: Mapped[int] = mapped_column(Integer, default=0)
     rating: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outcome: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")

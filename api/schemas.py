@@ -60,6 +60,7 @@ class MessageOut(BaseModel):
     prompt_tokens: int = 0
     latency_ms: int = 0
     rating: int | None = None
+    outcome: str | None = None
 
 
 class FeedbackRequest(BaseModel):

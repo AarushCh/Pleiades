@@ -840,3 +840,136 @@
   font-size: 11px;
   color: var(--ink-faint);
 }
+
+.handoff {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 3px 11px;
+  font-size: 11.5px;
+  color: var(--mint);
+  background: color-mix(in srgb, var(--mint) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mint) 30%, transparent);
+  border-radius: 20px;
+}
+
+.notice {
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--mint) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mint) 30%, transparent);
+  border-radius: 9px;
+}
+
+.admin {
+  width: 100%;
+  max-width: 980px;
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.card {
+  padding: 14px 16px;
+  display: grid;
+  gap: 2px;
+}
+
+.card__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.card__value {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.card__sub {
+  font-size: 11.5px;
+  color: var(--ink-dim);
+}
+
+.panel--row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+}
+
+.panel h3 {
+  margin: 0 0 2px;
+  font-size: 13.5px;
+}
+
+.panel p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+
+.panel__actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.queue {
+  margin: 0;
+  padding: 10px;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  max-height: 460px;
+  overflow-y: auto;
+}
+
+.queue__item {
+  padding: 10px 13px;
+  border: 1px solid var(--glass-line);
+  border-radius: 10px;
+  background: var(--well);
+}
+
+.queue__meta {
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.queue__q {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.queue__why {
+  font-size: 12.5px;
+  color: var(--danger-ink);
+}
+
+.queue details {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+
+.queue summary {
+  cursor: pointer;
+}
+
+.queue__empty {
+  margin: 0;
+  padding: 16px 18px;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}

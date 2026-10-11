@@ -12,6 +12,7 @@ import {
   streamChat,
   writeSession,
 } from "../lib/api";
+import Admin from "../components/Admin";
 import AuthGate from "../components/AuthGate";
 import { Btn3, Btn12 } from "../components/Buttons";
 import Details from "../components/Details";
@@ -62,6 +63,7 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [theme, setTheme] = useState(null);
   const [menu, setMenu] = useState(false);
+  const [view, setView] = useState("chat");
 
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
@@ -74,7 +76,11 @@ export default function Page() {
       return;
     }
     getMe()
-      .then(() => setSession(stored))
+      .then((me) => {
+        const fresh = { ...stored, admin: me.admin };
+        writeSession(fresh);
+        setSession(fresh);
+      })
       .catch(() => {
         writeSession(null);
         setSession(null);
@@ -153,7 +159,7 @@ export default function Page() {
               return next;
             }),
           onDone: (done) => {
-            patch({ totalMs: performance.now() - started, id: done.message_id, rating: null });
+            patch({ totalMs: performance.now() - started, id: done.message_id, rating: null, outcome: done.outcome });
             refreshConvos();
           },
           onError: (message) => patch({ error: message }),
@@ -172,6 +178,7 @@ export default function Page() {
   const openConvo = async (id) => {
     abortRef.current?.abort();
     setMenu(false);
+    setView("chat");
     let rows;
     try {
       rows = await getConversation(id);
@@ -188,6 +195,7 @@ export default function Page() {
               role: "bot",
               id: m.id,
               rating: m.rating,
+              outcome: m.outcome,
               content: m.content,
               meta: m.sources
                 ? { sources: m.sources, prompt_tokens: m.prompt_tokens, expansions: [] }
@@ -211,6 +219,7 @@ export default function Page() {
   const newConvo = () => {
     abortRef.current?.abort();
     setMenu(false);
+    setView("chat");
     setConvoId(null);
     setMessages([]);
   };
@@ -304,6 +313,18 @@ export default function Page() {
               <div className="who__email">{session.email}</div>
             </div>
           </div>
+          {session.admin && (
+            <Btn3
+              variant="quiet"
+              size="sm"
+              onClick={() => {
+                setView(view === "admin" ? "chat" : "admin");
+                setMenu(false);
+              }}
+            >
+              {view === "admin" ? "Back to chat" : "Admin console"}
+            </Btn3>
+          )}
           <Btn3
             variant="quiet"
             size="sm"
@@ -324,8 +345,12 @@ export default function Page() {
             Menu
           </button>
           <div>
-            <h2>Support conversation</h2>
-            <p>Grounded in {health?.documents?.length ?? "the"} internal documents, with citations</p>
+            <h2>{view === "admin" ? "Admin console" : "Support conversation"}</h2>
+            <p>
+              {view === "admin"
+                ? "Your organisation's last 7 days, and what needs a person"
+                : `Grounded in ${health?.documents?.length ?? "the"} internal documents, with citations`}
+            </p>
           </div>
           <span className="live">
             <span className={`live__dot ${healthError ? "live__dot--off" : ""}`} />
@@ -333,6 +358,12 @@ export default function Page() {
           </span>
         </div>
 
+        {view === "admin" ? (
+          <div className="thread">
+            <Admin />
+          </div>
+        ) : (
+        <>
         <div className="thread">
           {messages.length === 0 && (
             <div className="welcome">
@@ -376,6 +407,7 @@ export default function Page() {
                   )}
                   {m.error && <div className="alert">{m.error}</div>}
                   {m.meta && <Details meta={m.meta} totalMs={m.totalMs} />}
+                  {m.outcome === "escalated" && <div className="handoff">Passed to the support team</div>}
                   {m.id && <Feedback key={m.id} id={m.id} rating={m.rating} />}
                 </div>
               </div>
@@ -403,6 +435,8 @@ export default function Page() {
             {busy ? "Sending" : "Send"}
           </Btn3>
         </form>
+        </>
+        )}
       </main>
     </div>
   );
