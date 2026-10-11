@@ -22,6 +22,13 @@ def _no_carried_cookies(client):
     client.cookies.clear()
 
 
+@pytest.fixture(autouse=True)
+def _fresh_rate_limits():
+    from api.deps import _HITS
+
+    _HITS.clear()
+
+
 @pytest.fixture(scope="module")
 def account(client):
     email = f"{uuid.uuid4().hex[:12]}@example.com"
@@ -161,6 +168,22 @@ def test_search_respects_top_k(client, account):
         "/api/search", json={"query": "billing", "top_k": 2}, headers=account["headers"]
     ).json()
     assert len(body["sources"]) <= 2
+
+
+def test_only_admins_spend_model_calls_on_search(client, account, promote, monkeypatch):
+    import api.main as main
+    from src.rag import SupportAssistant
+
+    calls = []
+    monkeypatch.setattr(SupportAssistant, "has_llm", property(lambda self: True))
+    monkeypatch.setattr(config, "EXPAND_THRESHOLD", 2.0)
+    monkeypatch.setattr(main.STATE["bots"][config.DEFAULT_TENANT], "_expand", lambda q: calls.append(q) or [])
+    search = {"query": "router keeps dropping"}
+    assert client.post("/api/search", json=search, headers=account["headers"]).status_code == 200
+    assert calls == []
+    promote(account["email"])
+    assert client.post("/api/search", json=search, headers=account["headers"]).status_code == 200
+    assert calls == ["router keeps dropping"]
 
 
 def test_chat_streams_and_persists(client, account):

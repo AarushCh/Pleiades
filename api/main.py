@@ -160,8 +160,10 @@ def health() -> HealthResponse:
 async def search(req: SearchRequest, user: User = Depends(current_user),
                  db: Session = Depends(get_db)) -> SearchResponse:
     b = bot(tenant_slug(db, user))
+    if not user.is_admin:
+        rate_limit(f"chat:{user.id}", 6, 60)
     start = time.perf_counter()
-    r = await asyncio.to_thread(b.retrieve, req.query, [], req.top_k)
+    r = await asyncio.to_thread(b.retrieve, req.query, [], req.top_k, user.is_admin)
     return SearchResponse(
         query=r.query,
         expansions=r.expansions,

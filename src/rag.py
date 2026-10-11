@@ -187,7 +187,7 @@ class SupportAssistant:
         return queries
 
     def retrieve(self, question: str, history: list[tuple[str, str]] | None = None,
-                 top_k: int | None = None) -> Retrieval:
+                 top_k: int | None = None, expand: bool = True) -> Retrieval:
         history = self.history if history is None else history
         top_k = top_k or self.top_k
         condensed = self._needs_condensing(question, history)
@@ -204,7 +204,7 @@ class SupportAssistant:
         best = max((h[0][1] for h in base if h), default=0.0)
 
         expansions: list[str] = []
-        if self.has_llm and best < config.EXPAND_THRESHOLD:
+        if expand and self.has_llm and best < config.EXPAND_THRESHOLD:
             expansions = self._expand(query)
 
         vector_lists = base + [self._vector(q, pool) for q in expansions]
