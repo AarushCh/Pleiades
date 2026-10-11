@@ -36,6 +36,12 @@ def test_no_history_means_no_condensing(assistant):
     assert r.query == "What does the RX-900 cost?"
 
 
+def test_a_follow_up_is_searched_with_the_previous_exchange(assistant):
+    history = [("My router's internet light is solid amber", "That usually means the login details are wrong.")]
+    r = assistant.retrieve("What do I do about it?", history, expand=False)
+    assert any("LED status indicators" in s for s in sections(r))
+
+
 @pytest.mark.llm
 def test_doa_policy_is_retrieved_for_natural_phrasing(assistant):
     r = assistant.retrieve("My router died 4 days after it arrived. Do I have to do triage?", [])

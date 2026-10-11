@@ -12,7 +12,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "eval" / "external" / "doc2dial"
 URL = "https://doc2dial.github.io/file/doc2dial_v1.0.1.zip"
+MULTI = "https://doc2dial.github.io/multidoc2dial/file/multidoc2dial.zip"
 FILES = ("doc2dial_doc.json", "doc2dial_dial_validation.json", "doc2dial_dial_test.json")
+CONTEXTS = ("follow-up alone", "with the previous question", "with the last exchange")
 KS = (1, 3, 6, 10)
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -60,6 +62,36 @@ def cases(by_id: dict, split: str) -> list[dict]:
     return out
 
 
+def follow_ups(by_id: dict, split: str) -> list[dict]:
+    archive = DATA.parent / "multidoc2dial" / "multidoc2dial.zip"
+    if not archive.exists():
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        urllib.request.urlretrieve(MULTI, archive)
+    with zipfile.ZipFile(archive) as z:
+        dials = json.loads(z.read(f"multidoc2dial/multidoc2dial_dial_{split}.json"))["dial_data"]
+    out = []
+    for domain in dials.values():
+        for dial in domain:
+            turns = dial["turns"]
+            for i in range(1, len(turns) - 1):
+                user, agent = turns[i], turns[i + 1]
+                refs = [r for r in agent["references"] if r["doc_id"] in by_id]
+                if user["role"] != "user" or agent["role"] != "agent" or not refs:
+                    continue
+                asked = [t["utterance"] for t in turns[:i] if t["role"] == "user"]
+                said = [t["utterance"] for t in turns[:i]]
+                docs = {by_id[r["doc_id"]]["file"] for r in refs}
+                pairs = [(a["utterance"], b["utterance"]) for a, b in zip(turns[:i], turns[1:i], strict=False)
+                         if a["role"] == "user" and b["role"] == "agent"]
+                out.append({"question": user["utterance"], "history": pairs,
+                            "questions": {"follow-up alone": user["utterance"],
+                                          "with the previous question": " ".join(asked[-1:] + [user["utterance"]]),
+                                          "with the last exchange": " ".join(said[-2:] + [user["utterance"]])},
+                            "files": docs,
+                            "spans": [by_id[r["doc_id"]]["spans"][r["id_sp"]]["text_sp"] for r in refs]})
+    return out
+
+
 def norm(text: str) -> str:
     return " ".join(re.findall(r"\w+", text.lower()))
 
@@ -73,7 +105,7 @@ def holds(body: str, span: str) -> bool:
 
 
 def score(ranked: list, case: dict) -> dict[str, list[bool]]:
-    doc = [c.metadata["filename"] == case["file"] for c in ranked]
+    doc = [c.metadata["filename"] in case.get("files", {case.get("file")}) for c in ranked]
     span = [d and any(holds(norm(c.page_content), s) for s in case["spans"]) for c, d in zip(ranked, doc, strict=True)]
     return {"document": [any(doc[:k]) for k in KS], "passage": [any(span[:k]) for k in KS]}
 
@@ -84,6 +116,8 @@ def main() -> None:
     parser.add_argument("--embedder", default=None,
                         help="EMBED_MODEL_DIR to use; 'default' for all-MiniLM-L6-v2; omit for the .env setting")
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--follow-ups", action="store_true",
+                        help="MultiDoc2Dial follow-up questions instead of doc2dial first turns")
     args = parser.parse_args()
 
     fetch()
@@ -102,8 +136,25 @@ def main() -> None:
 
     build_index("doc2dial")
     bot = SupportAssistant(tenant="doc2dial", fallbacks=False)
-    todo = cases(by_id, args.split)[: args.limit or None]
     deep = max(KS)
+    name = embedder_tag() or "all-MiniLM-L6-v2"
+    if args.follow_ups:
+        todo = follow_ups(by_id, args.split)[: args.limit or None]
+        print(f"MultiDoc2Dial {args.split}: {len(todo)} follow-up questions, {len(by_id)} documents, "
+              f"{len(bot.chunks)} chunks, embedder {name}; target is the passage the agent's reply uses\n")
+        print("| hybrid query | " + " | ".join(f"{kind} @{k}" for kind in ("passage", "document") for k in KS) + " |")
+        print("|---|" + "---|" * (2 * len(KS)))
+        for context in [*CONTEXTS, "Pleiades with the conversation history"]:
+            totals = {"document": [0] * len(KS), "passage": [0] * len(KS)}
+            for case in todo:
+                found = (bot.retrieve(case["question"], case["history"], top_k=deep) if context not in CONTEXTS
+                         else bot.retrieve(case["questions"][context], [], top_k=deep)).docs
+                for kind, hits in score(found, case).items():
+                    totals[kind] = [t + h for t, h in zip(totals[kind], hits, strict=True)]
+            cells = [f"{100 * h / len(todo):.1f}" for kind in ("passage", "document") for h in totals[kind]]
+            print(f"| {context} | " + " | ".join(cells) + " |")
+        return
+    todo = cases(by_id, args.split)[: args.limit or None]
     modes = {
         "vector": lambda q: [d for d, _ in bot._vector(q, deep)],
         "keyword": lambda q: bot._keyword(q, deep),
@@ -115,7 +166,6 @@ def main() -> None:
             for kind, hits in score(run(case["question"]), case).items():
                 totals[mode][kind] = [t + h for t, h in zip(totals[mode][kind], hits, strict=True)]
 
-    name = embedder_tag() or "all-MiniLM-L6-v2"
     print(f"doc2dial {args.split}: {len(todo)} first user turns, {len(by_id)} documents, "
           f"{len(bot.chunks)} chunks, embedder {name}\n")
     print("| mode | " + " | ".join(f"{kind} @{k}" for kind in ("passage", "document") for k in KS) + " |")

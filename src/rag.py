@@ -88,6 +88,11 @@ def format_history(history: list[tuple[str, str]]) -> str:
     return "History:\n" + "\n".join(lines) + "\n\n"
 
 
+def follow_up(question: str, history: list[tuple[str, str]]) -> str:
+    asked, said = history[-1]
+    return f"{asked} {said[:config.HISTORY_REPLY_CHARS]} {question}"
+
+
 def est_tokens(text: str) -> int:
     return len(text) // 4
 
@@ -203,6 +208,9 @@ class SupportAssistant:
         primary = self._vector(question, pool)
         base = [primary] + ([self._vector(query, pool)] if condensed else [])
         best = max((h[0][1] for h in base if h), default=0.0)
+        context = self._vector(follow_up(question, history), pool) if history and not condensed else []
+        if context:
+            base.append(context)
 
         expansions: list[str] = []
         if expand and self.has_llm and best < config.EXPAND_THRESHOLD:
@@ -225,10 +233,9 @@ class SupportAssistant:
             for h in keyword:
                 fused[h] = fused.get(h, 0.0) + config.KEYWORD_BONUS
 
+        leaders = primary[:1] + context[:1] if context else primary[:min(config.ANCHORS, top_k)]
         anchors = [] if config.FUSION == "rrf" else [
-            doc.metadata["hash"]
-            for doc, sim in primary[:min(config.ANCHORS, top_k)]
-            if sim >= config.MIN_RELEVANCE
+            doc.metadata["hash"] for doc, sim in leaders if sim >= config.MIN_RELEVANCE
         ]
         top = list(dict.fromkeys(anchors))
         for h in sorted(fused, key=lambda h: -fused[h]):
