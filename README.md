@@ -26,7 +26,7 @@ The demo tenant is **Nimbus Networks**, a fictional ISP.
 | `.\run.ps1 dev` | API with reload on `:8000`, Next dev server on `:5173` |
 | `.\run.ps1 demo` | Scripted five-question walkthrough in the terminal |
 | `.\run.ps1 cli` | Interactive terminal client |
-| `.\run.ps1 test` | pytest suite (82 tests) |
+| `.\run.ps1 test` | pytest suite (90 tests) |
 | `.\run.ps1 eval` | Retrieval recall benchmark |
 | `.\run.ps1 backend` | Reports which model is live and makes a test call |
 
@@ -70,12 +70,15 @@ Two services. Both have usable free tiers.
 
 **1. Database: Neon** (any Postgres works; Neon's free tier suspends when idle instead of pausing)
 Put the owner's connection string in `.env` as `DATABASE_ADMIN_URL` and run
-`python -m src.db setup` once. It creates the schema and tables, turns on row-level security,
-creates a `pleiades_app` role that can read and write rows but can't bypass the policies or
-change the schema, seeds the documents, and writes that role's connection string into `.env` as
-`DATABASE_URL`, so it never has to be shown. The app runs as that role. Run setup again after a
-schema change; it is safe to repeat. Without `DATABASE_URL` the app falls back to a local SQLite
-file, so development needs no setup.
+`python -m src.db setup` once. It creates the schema, applies the Alembic migrations in
+`src/migrations`, turns on row-level security, creates a `pleiades_app` role that can read and
+write rows but can't bypass the policies or change the schema, seeds the documents, and writes
+that role's connection string into `.env` as `DATABASE_URL`, so it never has to be shown. The app
+runs as that role, so it can't migrate anything itself: it checks the schema revision at startup
+and refuses to run against an older one. Run setup again whenever a migration is added; it is
+safe to repeat, and a database created before migrations existed is adopted at the baseline.
+Without `DATABASE_URL` the app falls back to a local SQLite file and migrates it itself, so
+development needs no setup.
 
 **2. App: Render** (`render.yaml` is committed; Railway and Fly.io work the same way)
 Point Render at the repo and set these:
@@ -88,10 +91,15 @@ Point Render at the repo and set these:
 | `GROQ_API_KEY` | from console.groq.com/keys |
 | `JWT_SECRET` | generated automatically by `render.yaml` |
 | `CORS_ORIGINS` | your deployed origin, only if the UI is hosted separately |
+| `CHAT_DAILY_LIMIT` | questions per account in any 24 hours, defaults to 30; admins are exempt |
 
 The Dockerfile builds the Next.js UI, installs the API, bakes the vector index into the image,
 and honours the platform's `$PORT`. One container serves the API and the UI, so no CORS setup is
 needed in the default single-origin deployment.
+
+After a deploy, `/api/health` says which database it reached (`primary` or the SQLite
+`fallback`), the schema revision the code runs against, and `rls`. `rls: true` means the app is
+connected as a role the policies bind and every tenant table is enforcing them.
 
 ### Why Chroma still works in production
 
@@ -117,9 +125,22 @@ changes.
 
 ## Accounts and data
 
-Signup and login are email plus a bcrypt-hashed password, with a signed JWT held in the browser
-and verified on every request. Conversations and messages are written to Postgres and scoped to
-their owner: requesting another user's conversation returns 404, not their data.
+Signup and login are email plus a bcrypt-hashed password. The signed token lives in an
+HttpOnly, SameSite=Strict cookie scoped to `/api` (Secure behind HTTPS), so scripts on the page
+never see it and other sites can't make the browser send it; API clients can send the same token
+as a Bearer header. Every token carries the account's session version, and signing out bumps it,
+which revokes every token issued before, on every device. Conversations and messages are written
+to Postgres and scoped to their owner: requesting another user's conversation returns 404, not
+their data.
+
+Each account gets `CHAT_DAILY_LIMIT` questions (30) in any rolling 24 hours, and six a minute.
+The models run on free tiers whose daily allowance everyone shares, so one visitor can't use it
+up for the rest.
+
+Every answer has Helpful and Not helpful under it, with an optional reason for the second, and
+only the person who asked can rate it. Admins get the latest complaints in their organisation,
+with the question, the answer, the reason and the sources, at `GET /api/admin/feedback`. That
+queue is where new benchmark cases come from.
 
 ### Organisations
 
@@ -238,6 +259,26 @@ retrieved documents include an uptime-to-credit table, `src/sla.py` reads that t
 the month's uptime over 30 days and picks the row. The result goes into the context marked as
 an exact calculation, so the model quotes it and the figure check accepts it. What the check
 still doesn't catch: figures written as words ("seven days").
+
+### Why off-topic questions aren't refused earlier
+
+Refusing before the draft would save the answer call on questions the documents can't answer.
+Two ways of doing it were measured, and neither was safe enough to ship.
+
+- **A similarity floor.** With Pleiades-Embed, the closest passage for 231 in-domain questions
+  (both benchmarks plus the teacher-written customer questions) scores as low as 0.368, and
+  terse ones go lower: "fiber cut in my area" scores 0.315. Meanwhile 22 off-topic questions score
+  as high as 0.562 ("How do I reset my Instagram password?" lands on the router's reset section).
+  Any floor either turns customers away or catches almost nothing.
+- **Letting the query expander answer NONE.** It already runs for nearly every question, so a
+  relevance verdict would cost nothing extra. Both models caught all 22 off-topic questions, but
+  qwen also declined 3 of the first 29 in-domain ones, including "no net since morning", and
+  gpt-oss-120b, with a stricter instruction, still declined 2 of 48: "fiber cut in my area" and
+  "can i get a refund if i change my mind?".
+
+Telling someone whose internet is down that support can't help costs far more than the 2,000 to
+3,000 tokens an off-topic question uses. So the answer step stays the judge. It sees the
+retrieved passages before deciding, and qwen refuses both must-refuse questions in the benchmark.
 
 ## Our own models
 
@@ -388,11 +429,14 @@ src/llm.py         backend selection, fallbacks, health check
 src/rag.py         hybrid retrieval and grounded generation
 src/graph.py       LangGraph turn: retrieve, draft, verify, redraft or hand over
 src/grounding.py   checks every figure in an answer against its sources
+src/sla.py         works out SLA uptime and the credit row in code
+src/db.py          models, row-level security, setup, migrations runner
+src/migrations/    Alembic migrations
 src/cli.py         terminal client
 src/app.py         Streamlit UI (alternative to the Next.js one)
 api/               FastAPI service, SSE streaming, session store
 frontend/          Next.js app router, glass design system
-tests/             82 tests, LLM-dependent ones skip unless a backend answers
+tests/             90 tests, LLM-dependent ones skip unless a backend answers
 training/          training data, the embedder and answering-model fine-tunes, the project assistant
 eval/              retrieval benchmark (dataset.json) and answer benchmark (answers.json)
 ```
