@@ -433,6 +433,24 @@ the SLA credit: three days down is exactly 90.0% uptime, which earns 50%, and it
 lookup now happens in code and the answer comes back right. No other question in the benchmark
 triggers the calculation, so their prompts are unchanged.
 
+## Security
+
+Sessions live in an HttpOnly, SameSite=Strict cookie and sign-out revokes every earlier token;
+each organisation's rows are fenced by Postgres row-level security under a role that can't bypass
+it; admin is a flag on the account and an organisation can require a join code; sign-up, sign-in
+and chat are rate-limited by an address the client can't forge behind Render's proxy; errors stay
+in the server log; and every response carries a Content-Security-Policy that admits only this
+origin's scripts and the build's own inline ones by hash, plus HSTS and nosniff. Each of these has
+a test that fails when the protection is removed.
+
+Scanner findings that don't apply, so nobody re-investigates them:
+
+| Finding | Why it doesn't apply |
+|---|---|
+| pip-audit: chromadb advisories | They concern Chroma's HTTP server; Pleiades runs Chroma embedded, in-process, with no server |
+| bandit B310: `urlopen` in `src/llm.py` | The URLs come from the operator's own environment (`OLLAMA_BASE_URL` and the like), never from a request |
+| bandit B106: `token=""` in `/api/auth/me` | An empty field in a response, not a password |
+
 ## Backends and failover
 
 Auto-detected in order: Llama API → Groq → OpenRouter → Ollama → extractive stub. Hosted models
