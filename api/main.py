@@ -4,6 +4,7 @@ import asyncio
 import json
 import sys
 import time
+import traceback
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from pathlib import Path
@@ -212,8 +213,10 @@ async def chat(
                 for update in b.graph.stream({"question": question, "history": history},
                                              stream_mode="updates"):
                     loop.call_soon_threadsafe(queue.put_nowait, ("update", update))
-            except Exception as exc:
-                loop.call_soon_threadsafe(queue.put_nowait, ("error", str(exc)))
+            except Exception:
+                traceback.print_exc()
+                loop.call_soon_threadsafe(queue.put_nowait, (
+                    "error", "Something went wrong while answering. Please try again in a moment."))
             finally:
                 loop.call_soon_threadsafe(queue.put_nowait, ("done", None))
 

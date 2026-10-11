@@ -326,3 +326,17 @@ def test_health_reports_the_schema_revision(client):
     from src import db
 
     assert client.get("/api/health").json()["schema_revision"] == db.head()
+
+
+def test_a_failing_answer_does_not_leak_internals(client, account, monkeypatch, capsys):
+    import api.main as main
+
+    def explode(*_args, **_kwargs):
+        raise RuntimeError("password=hunter2 at db.internal:5432")
+
+    monkeypatch.setattr(main.STATE["bots"][config.DEFAULT_TENANT].graph, "stream", explode)
+    with client.stream("POST", "/api/chat", json={"question": "hello"}, headers=account["headers"]) as res:
+        body = "".join(res.iter_text())
+    assert "event: error" in body
+    assert "hunter2" not in body and "db.internal" not in body
+    assert "hunter2" in capsys.readouterr().err
