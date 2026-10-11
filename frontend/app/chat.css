@@ -1004,3 +1004,7 @@
   border: 1px solid var(--glass-line);
   color: var(--ink);
 }
+
+.tab--end + .live {
+  margin-left: 0;
+}

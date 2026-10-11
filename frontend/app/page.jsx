@@ -237,6 +237,26 @@ export default function Page() {
     });
   };
 
+  const exportConvo = () => {
+    const title =
+      convos.find((c) => c.id === convoId)?.title ||
+      messages.find((m) => m.role === "user")?.content.slice(0, 80) ||
+      "Conversation";
+    const body = messages
+      .filter((m) => m.content)
+      .map((m) => {
+        if (m.role === "user") return `**You:** ${m.content}`;
+        const cited = (m.meta?.sources || []).map((s) => `- ${s.label}${s.section ? ` > ${s.section}` : ""}`);
+        return `**Pleiades:** ${m.content}` + (cited.length ? `\n\nSources:\n${cited.join("\n")}` : "");
+      })
+      .join("\n\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([`# ${title}\n\n${body}\n`], { type: "text/markdown" }));
+    link.download = `pleiades-conversation-${new Date().toISOString().slice(0, 10)}.md`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
   const newConvo = () => {
     abortRef.current?.abort();
     setMenu(false);
@@ -373,6 +393,11 @@ export default function Page() {
                 : `Grounded in ${health?.documents?.length ?? "the"} internal documents, with citations`}
             </p>
           </div>
+          {view === "chat" && messages.some((m) => m.id) && (
+            <button type="button" className="tab tab--end" onClick={exportConvo}>
+              Download
+            </button>
+          )}
           <span className="live">
             <span className={`live__dot ${healthError ? "live__dot--off" : ""}`} />
             {healthError ? "offline" : busy ? "generating" : "ready"}
@@ -434,7 +459,7 @@ export default function Page() {
                       Every figure checked against the sources{m.attempts > 1 ? " after one redraft" : ""}
                     </div>
                   )}
-                  {m.id && <Feedback key={m.id} id={m.id} rating={m.rating} />}
+                  {m.id && <Feedback key={m.id} id={m.id} rating={m.rating} text={m.content} />}
                 </div>
               </div>
             )

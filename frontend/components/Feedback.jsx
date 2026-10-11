@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { rateAnswer } from "../lib/api";
 
-export default function Feedback({ id, rating }) {
+export default function Feedback({ id, rating, text }) {
+  const [copied, setCopied] = useState(false);
   const [value, setValue] = useState(rating ?? 0);
   const [asking, setAsking] = useState(false);
   const [reason, setReason] = useState("");
@@ -19,6 +20,18 @@ export default function Feedback({ id, rating }) {
 
   return (
     <div className="feedback">
+      <button
+        type="button"
+        className="tab"
+        onClick={() =>
+          navigator.clipboard
+            ?.writeText(text)
+            .then(() => setCopied(true))
+            .catch(() => {})
+        }
+      >
+        {copied ? "Copied" : "Copy"}
+      </button>
       <button
         type="button"
         className={`tab${value === 1 ? " on" : ""}`}
