@@ -1008,3 +1008,10 @@
 .tab--end + .live {
   margin-left: 0;
 }
+
+.src__excerpt mark {
+  padding: 0 1px;
+  border-radius: 3px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}

@@ -452,7 +452,7 @@ export default function Page() {
                     </div>
                   )}
                   {m.error && <div className="alert">{m.error}</div>}
-                  {m.meta && <Details meta={m.meta} totalMs={m.totalMs} />}
+                  {m.meta && <Details meta={m.meta} totalMs={m.totalMs} question={messages[i - 1]?.content} />}
                   {m.outcome === "escalated" && <div className="handoff">Passed to the support team</div>}
                   {m.outcome === "answered" && (
                     <div className="checked">

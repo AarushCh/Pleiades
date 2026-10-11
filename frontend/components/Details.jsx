@@ -2,6 +2,22 @@
 
 import { useState } from "react";
 
+const COMMON = new Set(
+  "what when where which does have with that this your from there about would could should will into they them then than been were their after before also just only much many more most some such very like want need still".split(
+    " "
+  )
+);
+
+function keywords(text) {
+  return [...new Set((text || "").toLowerCase().match(/[a-z0-9]{4,}/g) || [])].filter((w) => !COMMON.has(w));
+}
+
+function Highlight({ text, words }) {
+  if (!words.length) return text;
+  const parts = text.split(new RegExp(`(${words.join("|")})`, "gi"));
+  return parts.map((part, i) => (i % 2 ? <mark key={i}>{part}</mark> : part));
+}
+
 function Score({ score }) {
   if (score == null) return <span className="pill-kw">kw</span>;
   return (
@@ -14,7 +30,7 @@ function Score({ score }) {
   );
 }
 
-function Source({ source }) {
+function Source({ source, words }) {
   const [open, setOpen] = useState(false);
   return (
     <div>
@@ -26,12 +42,16 @@ function Source({ source }) {
           {open ? "−" : "+"}
         </span>
       </button>
-      {open && <pre className="src__excerpt">{source.excerpt}</pre>}
+      {open && (
+        <pre className="src__excerpt">
+          <Highlight text={source.excerpt} words={words} />
+        </pre>
+      )}
     </div>
   );
 }
 
-export default function Details({ meta, totalMs }) {
+export default function Details({ meta, totalMs, question }) {
   const [tab, setTab] = useState("sources");
   if (!meta) return null;
 
@@ -68,7 +88,7 @@ export default function Details({ meta, totalMs }) {
       {tab === "sources" ? (
         <div className="srcs">
           {meta.sources?.map((s, i) => (
-            <Source key={`${s.label}-${s.section}-${i}`} source={s} />
+            <Source key={`${s.label}-${s.section}-${i}`} source={s} words={keywords(meta.query || question)} />
           ))}
         </div>
       ) : (
