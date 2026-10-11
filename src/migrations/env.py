@@ -5,11 +5,11 @@ import os
 from alembic import context
 from sqlalchemy import create_engine
 
-from src.db import SCHEMA, Base, database_url, normalised
+from src.db import SCHEMA, Base, database_url, normalised, schema_for
 
 
 def run(connection) -> None:
-    schema = None if connection.dialect.name == "sqlite" else SCHEMA
+    schema = schema_for(connection)
     if SCHEMA and schema is None:
         connection = connection.execution_options(schema_translate_map={SCHEMA: None})
     context.configure(

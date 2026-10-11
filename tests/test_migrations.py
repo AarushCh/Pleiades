@@ -35,3 +35,12 @@ def test_a_database_missing_columns_is_caught(tmp_path):
     gaps = db.missing_columns(engine)
     assert "users.tenant_id" in gaps
     assert "tenants.slug" in gaps
+
+
+def test_a_fresh_fallback_migrates_while_a_postgres_schema_is_configured(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "SCHEMA", "pleiades")
+    engine = create_engine(f"sqlite:///{tmp_path / 'fallback.db'}").execution_options(
+        schema_translate_map={"pleiades": None})
+    db.migrate(engine)
+    assert db.revision(engine) == db.head()
+    assert "handover_at" in {c["name"] for c in inspect(engine).get_columns("messages")}

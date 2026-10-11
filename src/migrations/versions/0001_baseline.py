@@ -1,7 +1,7 @@
 import sqlalchemy as sa
 from alembic import op
 
-from src.db import SCHEMA
+from src.db import SCHEMA, schema_for
 
 revision = "0001"
 down_revision = None
@@ -9,8 +9,12 @@ branch_labels = None
 depends_on = None
 
 
+def where() -> str | None:
+    return schema_for(op.get_bind())
+
+
 def ref(table: str) -> str:
-    return f"{SCHEMA}.{table}.id" if SCHEMA else f"{table}.id"
+    return f"{where()}.{table}.id" if where() else f"{table}.id"
 
 
 def ix(table: str, column: str) -> str:
@@ -27,7 +31,7 @@ def stamp(name: str) -> sa.Column:
 
 def indexed(table: str, *columns: str) -> None:
     for column in columns:
-        op.create_index(ix(table, column), table, [column], schema=SCHEMA)
+        op.create_index(ix(table, column), table, [column], schema=where())
 
 
 def upgrade() -> None:
@@ -37,9 +41,9 @@ def upgrade() -> None:
         sa.Column("slug", sa.String(63), nullable=False),
         sa.Column("name", sa.String(200), nullable=False),
         stamp("created_at"),
-        schema=SCHEMA,
+        schema=where(),
     )
-    op.create_index(ix("tenants", "slug"), "tenants", ["slug"], unique=True, schema=SCHEMA)
+    op.create_index(ix("tenants", "slug"), "tenants", ["slug"], unique=True, schema=where())
     op.create_table(
         "users",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -49,7 +53,7 @@ def upgrade() -> None:
         sa.Column("password_hash", sa.String(255), nullable=False),
         stamp("created_at"),
         sa.UniqueConstraint("tenant_id", "email"),
-        schema=SCHEMA,
+        schema=where(),
     )
     indexed("users", "tenant_id", "email")
     op.create_table(
@@ -60,7 +64,7 @@ def upgrade() -> None:
         sa.Column("title", sa.String(200), nullable=False),
         stamp("created_at"),
         stamp("updated_at"),
-        schema=SCHEMA,
+        schema=where(),
     )
     indexed("conversations", "tenant_id", "user_id")
     op.create_table(
@@ -74,7 +78,7 @@ def upgrade() -> None:
         sa.Column("prompt_tokens", sa.Integer(), nullable=False),
         sa.Column("latency_ms", sa.Integer(), nullable=False),
         stamp("created_at"),
-        schema=SCHEMA,
+        schema=where(),
     )
     indexed("messages", "tenant_id", "conversation_id")
     op.create_table(
@@ -86,11 +90,11 @@ def upgrade() -> None:
         sa.Column("body", sa.Text(), nullable=False),
         stamp("updated_at"),
         sa.UniqueConstraint("tenant_id", "filename"),
-        schema=SCHEMA,
+        schema=where(),
     )
     indexed("documents", "tenant_id", "filename")
 
 
 def downgrade() -> None:
     for table in ("documents", "messages", "conversations", "users", "tenants"):
-        op.drop_table(table, schema=SCHEMA)
+        op.drop_table(table, schema=where())

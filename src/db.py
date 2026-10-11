@@ -201,19 +201,19 @@ def head() -> str:
     return ScriptDirectory.from_config(alembic_config()).get_current_head()
 
 
-def _schema_for(conn) -> str | None:
+def schema_for(conn) -> str | None:
     return None if conn.dialect.name == "sqlite" else SCHEMA
 
 
 def revision(bind) -> str | None:
     with bind.connect() as conn:
         return MigrationContext.configure(
-            conn, opts={"version_table_schema": _schema_for(conn)}).get_current_revision()
+            conn, opts={"version_table_schema": schema_for(conn)}).get_current_revision()
 
 
 def migrate(bind) -> None:
     with bind.begin() as conn:
-        tables = inspect(conn).get_table_names(schema=_schema_for(conn))
+        tables = inspect(conn).get_table_names(schema=schema_for(conn))
         cfg = alembic_config(conn)
         if "users" in tables and "alembic_version" not in tables:
             command.stamp(cfg, "0001")
@@ -286,7 +286,7 @@ class SchemaMismatch(Exception):
 
 def missing_columns(bind) -> list[str]:
     with bind.connect() as conn:
-        schema, found = _schema_for(conn), inspect(conn)
+        schema, found = schema_for(conn), inspect(conn)
         gaps = []
         for table in Base.metadata.sorted_tables:
             have = ({c["name"] for c in found.get_columns(table.name, schema=schema)}
