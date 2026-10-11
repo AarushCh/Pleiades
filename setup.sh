@@ -13,9 +13,9 @@ if [[ ! -x "$PY" ]]; then
     if command -v uv >/dev/null; then uv venv --python 3.13 .venv; else python3 -m venv .venv; fi
 fi
 if command -v uv >/dev/null; then
-    uv pip install --python "$PY" -r requirements.txt
+    uv pip install --python "$PY" -r requirements.lock
 else
-    "$PY" -m pip install --upgrade pip && "$PY" -m pip install -r requirements.txt
+    "$PY" -m pip install --upgrade pip && "$PY" -m pip install -r requirements.lock
 fi
 
 step "Configuration"

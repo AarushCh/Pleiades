@@ -14,10 +14,10 @@ if (-not (Test-Path $py)) {
     if ($launcher -eq "uv") { uv venv --python 3.13 .venv } else { py -3 -m venv .venv }
 }
 if (Get-Command uv -EA SilentlyContinue) {
-    uv pip install --python $py -r requirements.txt
+    uv pip install --python $py -r requirements.lock
 } else {
     & $py -m pip install --upgrade pip
-    & $py -m pip install -r requirements.txt
+    & $py -m pip install -r requirements.lock
 }
 
 Step "Configuration"

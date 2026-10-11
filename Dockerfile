@@ -15,8 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin pleiades
 ENV HOME=/home/pleiades
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.lock ./
+RUN pip install --no-cache-dir -r requirements.lock
 
 ARG EMBED_REPO=AUC6/pleiades-embed
 ARG EMBED_REVISION=a2a24ce968be8f0fae861b25badf38d20198fa8c

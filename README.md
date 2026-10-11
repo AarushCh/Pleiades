@@ -32,6 +32,11 @@ The demo tenant is **Nimbus Networks**, a fictional ISP.
 
 Interactive API docs are at `/docs`. Docker: `docker build -t nimbus . && docker run -p 8000:8000 --env-file .env nimbus`.
 
+Every install (the setup scripts, CI and the Docker image) uses the exact versions pinned in
+`requirements.lock`, so a new upstream release can't change a build that already passed. To
+change a dependency, edit `requirements.txt` and recompile the lock:
+`uv pip compile requirements.txt --universal --python-version 3.13 --no-header --no-annotate -o requirements.lock`.
+
 ## Architecture
 
 ```
