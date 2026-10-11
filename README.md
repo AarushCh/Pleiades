@@ -160,7 +160,9 @@ One deployment serves many organisations, and none of them can see another's dat
 pick the organisation from the `X-Tenant` header (Nimbus Networks when it's absent); after that
 the organisation travels inside the signed token and is checked against the account on every
 request, so a token can't be replayed against another one. An email address is unique within an
-organisation, not across them.
+organisation, not across them. An organisation is open to sign-up by default; its admin can make
+it invite-only with `POST /api/admin/join-code`, which returns a code new accounts must send as
+`join_code` (a fresh call replaces it, and `DELETE` opens sign-up again).
 
 Each organisation gets its own Chroma collection rather than a share of one collection behind a
 filter. A bug in retrieval can't reach documents it was never indexed next to.

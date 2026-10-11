@@ -91,6 +91,7 @@ class Tenant(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     slug: Mapped[str] = mapped_column(String(63), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(200))
+    join_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 

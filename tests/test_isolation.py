@@ -179,3 +179,20 @@ def test_the_database_refuses_a_write_into_another_tenant(tenants):
         s.add(Document(tenant_id=tenants["away_id"], filename="planted.md", label="x", body="x"))
         with pytest.raises(DBAPIError):
             s.commit()
+
+
+def test_an_invite_only_organisation_needs_its_join_code(client, tenants):
+    admin = signup(client, tenants["away"], f"{uuid.uuid4().hex[:12]}@example.com")
+    assert db.grant_admin(admin["email"], tenants["away"])
+    code = client.post("/api/admin/join-code", headers=admin["headers"]).json()["join_code"]
+    try:
+        attempt = {"name": "Stranger", "email": f"{uuid.uuid4().hex[:12]}@example.com", "password": "correct-horse"}
+        away = {"X-Tenant": tenants["away"]}
+        assert client.post("/api/auth/signup", json=attempt, headers=away).status_code == 403
+        assert client.post("/api/auth/signup", json={**attempt, "join_code": "guess"}, headers=away).status_code == 403
+        assert client.post("/api/auth/signup", json={**attempt, "join_code": code}, headers=away).status_code == 200
+        home = signup(client, tenants["home"], f"{uuid.uuid4().hex[:12]}@example.com")
+        assert home["tenant"] == tenants["home"]
+    finally:
+        assert client.delete("/api/admin/join-code", headers=admin["headers"]).status_code == 200
+    signup(client, tenants["away"], f"{uuid.uuid4().hex[:12]}@example.com")

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -18,6 +20,7 @@ class SignupRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=8, max_length=200)
+    join_code: str | None = Field(default=None, max_length=64)
 
 
 class LoginRequest(BaseModel):
@@ -49,6 +52,8 @@ def start_session(request: Request, response: Response, user: User, tenant: Tena
 def signup(req: SignupRequest, request: Request, response: Response, db: Session = Depends(get_db),
            tenant: Tenant = Depends(current_tenant)) -> AuthResponse:
     rate_limit(f"signup:{client_ip(request)}", 10, 900)
+    if tenant.join_code and not secrets.compare_digest((req.join_code or "").encode(), tenant.join_code.encode()):
+        raise HTTPException(403, "This organisation is invite-only. Ask its admin for the join code.")
     email = req.email.strip().lower()
     problem = validate_credentials(email, req.password)
     if problem:

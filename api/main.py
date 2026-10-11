@@ -5,6 +5,7 @@ import base64
 import hashlib
 import json
 import re
+import secrets
 import sys
 import time
 import traceback
@@ -387,6 +388,21 @@ def triage(user: User = Depends(admin_user), db: Session = Depends(get_db)) -> l
         "sources": json.loads(m.sources) if m.sources else [],
         "created_at": m.created_at,
     } for m in rows]
+
+
+@app.post("/api/admin/join-code")
+def new_join_code(user: User = Depends(admin_user), db: Session = Depends(get_db)) -> dict:
+    tenant = db.get(Tenant, user.tenant_id)
+    tenant.join_code = secrets.token_urlsafe(12)
+    db.commit()
+    return {"join_code": tenant.join_code}
+
+
+@app.delete("/api/admin/join-code")
+def open_signup(user: User = Depends(admin_user), db: Session = Depends(get_db)) -> dict:
+    db.get(Tenant, user.tenant_id).join_code = None
+    db.commit()
+    return {"join_code": None}
 
 
 @app.post("/api/admin/reseed")
