@@ -283,6 +283,15 @@ fitting a 512 MB free instance. First place is the encoder's call, because fusio
 two: with MiniLM that put the right passage first 27.2% of the time against keyword search's
 38.4%, and with Pleiades-Embed the two are level (39.0%).
 
+Tuning fusion on this set (validation to choose, the 661-question test split to confirm, the
+Nimbus set to guard): raising the keyword bonus from 0.06 to 0.3 never helped. Dropping the two
+anchors put the right passage first on 41.1% of test questions instead of 36.6% at the same
+recall@6, but on Nimbus with query expansion zero anchors loses a question (see above). Keeping the
+anchors in the six but ordering the six by fused score splits the difference the wrong way: first
+place rises to 39.9% on doc2dial's test split and falls from 9 to 7 of 15 on Nimbus, where the
+tuned encoder's own top hit is better. The six passages the model reads are the same either way, so
+production keeps the anchors first.
+
 ## Checking the answer before anyone sees it
 
 A model that has the right passage can still write the wrong number. A refund window of 14 days
