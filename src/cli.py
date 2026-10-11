@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import time
 
+from src.embeddings import embedder_tag
 from src.rag import SupportAssistant
 
 for _stream in (sys.stdout, sys.stderr):
@@ -49,7 +50,7 @@ def main() -> None:
     bot = SupportAssistant()
     print(f"\n{BOLD}Nimbus Support Assistant{RESET}")
     print(f"{DIM}generation: {bot.backend_name}")
-    print(f"retrieval:  ChromaDB · all-MiniLM-L6-v2 · top-{bot.top_k}{RESET}")
+    print(f"retrieval:  ChromaDB · {embedder_tag() or 'all-MiniLM-L6-v2'} · top-{bot.top_k}{RESET}")
     print("-" * 72)
 
     if "--demo" in args:

@@ -9,6 +9,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src import config
+from src.embeddings import embedder_tag
 from src.rag import SYSTEM_PROMPT, SupportAssistant, est_tokens, format_context, format_history
 
 st.set_page_config(page_title="Nimbus Support Assistant", page_icon="💬", layout="wide")
@@ -69,7 +70,7 @@ with st.sidebar:
     st.caption("Generation")
     st.code(bot.backend_name, language=None)
     st.caption("Retrieval")
-    st.code(f"ChromaDB · all-MiniLM-L6-v2\ncosine · top-{bot.top_k}", language=None)
+    st.code(f"ChromaDB · {embedder_tag() or 'all-MiniLM-L6-v2'}\ncosine · top-{bot.top_k}", language=None)
 
     if bot.backend_name.startswith("Extractive"):
         st.warning("No LLM connected. Set a key in `.env` or run `ollama serve`, then restart.")
