@@ -89,7 +89,7 @@ def wait_hint(message: str) -> float:
 
 
 def patient(call, bot=None):
-    for _ in range(8):
+    for attempt in range(12):
         if bot is not None:
             bot.last_error = None
         try:
@@ -101,13 +101,13 @@ def patient(call, bot=None):
             if "RateLimit" not in type(exc).__name__:
                 raise
             message = str(exc)
-        wait = wait_hint(message)
+        wait = wait_hint(message) + 5 * attempt
         if "per day" in message and wait > 3 * 3600:
             raise SystemExit(f"The teacher's free daily token cap is used up; run again in {wait / 3600:.1f} h, "
                              "and it resumes where it stopped")
         print(f"  rate limited, waiting {wait / 60:.1f} min", flush=True)
         time.sleep(wait + 2)
-    raise RuntimeError("Still rate limited after eight attempts")
+    raise RuntimeError("Still rate limited after twelve attempts")
 
 
 def distill(bot, pause: float) -> None:
