@@ -79,7 +79,7 @@ export default function Page() {
     }
     getMe()
       .then((me) => {
-        const fresh = { ...stored, admin: me.admin };
+        const fresh = { name: me.name, email: me.email, tenant: me.tenant, admin: me.admin };
         writeSession(fresh);
         setSession(fresh);
       })
