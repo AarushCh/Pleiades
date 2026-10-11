@@ -6,6 +6,7 @@ import {
   getConversation,
   getHealth,
   getMe,
+  getUsage,
   listConversations,
   logout,
   readSession,
@@ -64,6 +65,7 @@ export default function Page() {
   const [theme, setTheme] = useState(null);
   const [menu, setMenu] = useState(false);
   const [view, setView] = useState("chat");
+  const [usage, setUsage] = useState(null);
 
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
@@ -94,6 +96,7 @@ export default function Page() {
   useEffect(() => {
     if (!session) return;
     getHealth().then(setHealth).catch((e) => setHealthError(e.message));
+    getUsage().then(setUsage).catch(() => {});
     refreshConvos();
   }, [session, refreshConvos]);
 
@@ -159,8 +162,15 @@ export default function Page() {
               return next;
             }),
           onDone: (done) => {
-            patch({ totalMs: performance.now() - started, id: done.message_id, rating: null, outcome: done.outcome });
+            patch({
+              totalMs: performance.now() - started,
+              id: done.message_id,
+              rating: null,
+              outcome: done.outcome,
+              attempts: done.attempts,
+            });
             refreshConvos();
+            getUsage().then(setUsage).catch(() => {});
           },
           onError: (message) => patch({ error: message }),
         });
@@ -214,6 +224,17 @@ export default function Page() {
       setMessages([]);
     }
     refreshConvos();
+  };
+
+  const stop = () => {
+    abortRef.current?.abort();
+    setMessages((m) => {
+      const next = [...m];
+      const last = next[next.length - 1];
+      if (last?.role === "bot" && !last.content)
+        next[next.length - 1] = { ...last, error: "Stopped before the answer was ready." };
+      return next;
+    });
   };
 
   const newConvo = () => {
@@ -408,6 +429,11 @@ export default function Page() {
                   {m.error && <div className="alert">{m.error}</div>}
                   {m.meta && <Details meta={m.meta} totalMs={m.totalMs} />}
                   {m.outcome === "escalated" && <div className="handoff">Passed to the support team</div>}
+                  {m.outcome === "answered" && (
+                    <div className="checked">
+                      Every figure checked against the sources{m.attempts > 1 ? " after one redraft" : ""}
+                    </div>
+                  )}
                   {m.id && <Feedback key={m.id} id={m.id} rating={m.rating} />}
                 </div>
               </div>
@@ -431,10 +457,19 @@ export default function Page() {
             disabled={busy}
             aria-label="Your question"
           />
-          <Btn3 type="submit" disabled={busy || !input.trim()}>
-            {busy ? "Sending" : "Send"}
-          </Btn3>
+          {busy ? (
+            <Btn3 onClick={stop}>Stop</Btn3>
+          ) : (
+            <Btn3 type="submit" disabled={!input.trim()}>
+              Send
+            </Btn3>
+          )}
         </form>
+        {usage?.limit != null && (
+          <p className="quota">
+            {Math.max(0, usage.limit - usage.used)} of {usage.limit} questions left in the last 24 hours
+          </p>
+        )}
         </>
         )}
       </main>

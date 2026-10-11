@@ -396,3 +396,16 @@ def test_handovers_reach_the_admin_queue_and_the_overview(client, account, promo
     assert stats["handed_over"] >= 1
     assert stats["answered"] == stats["questions"] - stats["handed_over"]
     assert stats["people"] >= 1
+
+
+def test_usage_counts_todays_answers_against_the_limit(client):
+    body = client.post(
+        "/api/auth/signup",
+        json={"name": "Usage", "email": f"{uuid.uuid4().hex[:12]}@example.com", "password": "correct-horse"},
+    ).json()
+    headers = {"Authorization": f"Bearer {body['token']}"}
+    assert client.get("/api/usage", headers=headers).json() == {"used": 0, "limit": config.CHAT_DAILY_LIMIT}
+    ask(client, headers)
+    assert client.get("/api/usage", headers=headers).json()["used"] == 1
+    client.cookies.clear()
+    assert client.get("/api/usage").status_code == 401

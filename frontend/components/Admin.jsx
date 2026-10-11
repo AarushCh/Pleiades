@@ -4,6 +4,21 @@ import { useEffect, useState } from "react";
 import { Btn3 } from "./Buttons";
 import { getComplaints, getHandovers, getJoinCode, getOverview, reseed, setInviteOnly } from "../lib/api";
 
+function download(rows) {
+  const cases = rows.map((r) => ({
+    id: `complaint-${r.id}`,
+    question: r.question,
+    must: [],
+    complaint: r.reason,
+    answer_given: r.answer,
+  }));
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([JSON.stringify(cases, null, 2)], { type: "application/json" }));
+  link.download = `pleiades-complaints-${new Date().toISOString().slice(0, 10)}.json`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
 function Queue({ rows, empty }) {
   if (!rows) return <p className="queue__empty">Loading…</p>;
   if (!rows.length) return <p className="queue__empty">{empty}</p>;
@@ -86,6 +101,11 @@ export default function Admin() {
           <button className={`tab ${tab === "complaints" ? "on" : ""}`} onClick={() => setTab("complaints")}>
             Not helpful ({complaints?.length ?? 0})
           </button>
+          {tab === "complaints" && complaints?.length > 0 && (
+            <button className="tab details__timing" onClick={() => download(complaints)}>
+              Download as benchmark cases
+            </button>
+          )}
         </div>
         {tab === "handovers" ? (
           <Queue rows={handovers} empty="Nothing handed over: every question was answered from the documents." />

@@ -203,6 +203,11 @@ def turns_today(db: Session, user: User) -> int:
         )) or 0
 
 
+@app.get("/api/usage")
+def usage(user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    return {"used": turns_today(db, user), "limit": None if user.is_admin else config.CHAT_DAILY_LIMIT}
+
+
 @app.post("/api/chat")
 async def chat(
     req: ChatRequest,
