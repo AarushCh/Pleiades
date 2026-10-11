@@ -285,3 +285,8 @@ def test_only_the_owner_can_rate_an_answer(client, account):
                       headers={"Authorization": f"Bearer {other['token']}"})
     assert res.status_code == 404
 
+
+def test_health_reports_the_schema_revision(client):
+    from src import db
+
+    assert client.get("/api/health").json()["schema_revision"] == db.head()

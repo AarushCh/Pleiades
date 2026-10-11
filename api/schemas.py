@@ -41,6 +41,8 @@ class HealthResponse(BaseModel):
     documents: list[str]
     database: str = "primary"
     llm_failures: list[str] = []
+    schema_revision: str = ""
+    rls: bool = False
 
 
 class ConversationOut(BaseModel):

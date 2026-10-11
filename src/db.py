@@ -5,6 +5,7 @@ import re
 import secrets
 import sys
 from datetime import UTC, datetime
+from functools import cache
 from urllib.parse import urlsplit, urlunsplit
 
 from alembic import command
@@ -189,6 +190,7 @@ def alembic_config(connection=None) -> Config:
     return cfg
 
 
+@cache
 def head() -> str:
     return ScriptDirectory.from_config(alembic_config()).get_current_head()
 

@@ -29,6 +29,7 @@ from api.schemas import (
     SearchResponse,
 )
 from src import config
+from src import db as storage
 from src.db import (
     Conversation,
     Message,
@@ -129,6 +130,8 @@ def health() -> HealthResponse:
         documents=list(config.SOURCE_LABELS.values()),
         database=STATE.get("database", "primary"),
         llm_failures=STATE.get("llm_failures", []),
+        schema_revision=storage.head(),
+        rls=storage.RLS,
     )
 
 
