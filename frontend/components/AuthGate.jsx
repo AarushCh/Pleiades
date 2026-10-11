@@ -32,7 +32,7 @@ export default function AuthGate({ onAuthenticated }) {
   };
 
   return (
-    <div className="auth">
+    <main className="auth">
       <form className="glass auth__card" onSubmit={submit}>
         <div className="auth__brand">
           <div className="brand__mark">P</div>
@@ -95,6 +95,6 @@ export default function AuthGate({ onAuthenticated }) {
           {busy ? "Working" : isSignup ? "Create account" : "Sign in"}
         </Btn3>
       </form>
-    </div>
+    </main>
   );
 }
