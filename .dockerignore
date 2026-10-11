@@ -16,3 +16,8 @@ Pleiades_summary.md
 *.db-wal
 *.db-shm
 *.pptx
+eval/external/
+training/build/
+extra_frontend/
+CapstoneStuff/
+Pleaides_Summary.md
