@@ -20,7 +20,7 @@
   {"id": "rma-stuck", "question": "My replacement has not arrived after three weeks. What are my options?",
    "must": [["14"], ["refund"], ["free service", "month of free", "free month", "month free"]]},
   {"id": "firmware-drops", "question": "Our office connection drops for a few minutes every hour.",
-   "must": [["firmware"], ["update", "upgrade"]]},
+   "must": [["firmware"], ["updat", "upgrad"]]},
   {"id": "router-return", "question": "If I cancel, do I have to send the router back?",
    "must": [["21 days", "21-day"], ["3,500", "3500", "6,900", "6900"]]},
   {"id": "port-forward", "question": "Can I forward port 25 for a mail server at home?",
