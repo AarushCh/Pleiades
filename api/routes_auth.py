@@ -30,6 +30,7 @@ class AuthResponse(BaseModel):
     name: str
     email: str
     tenant: str
+    admin: bool = False
 
 
 def https(request: Request) -> bool:
@@ -41,7 +42,7 @@ def start_session(request: Request, response: Response, user: User, tenant: Tena
     token = create_token(user.id, user.email, tenant.id, user.session_version)
     response.set_cookie(COOKIE, token, max_age=config.TOKEN_DAYS * 86400, path="/api", httponly=True,
                         samesite="strict", secure=https(request))
-    return AuthResponse(token=token, name=user.name, email=user.email, tenant=tenant.slug)
+    return AuthResponse(token=token, name=user.name, email=user.email, tenant=tenant.slug, admin=user.is_admin)
 
 
 @router.post("/signup", response_model=AuthResponse)
@@ -82,7 +83,7 @@ def login(req: LoginRequest, request: Request, response: Response, db: Session =
 def me(user: User = Depends(current_user), db: Session = Depends(get_db)) -> AuthResponse:
     tenant = db.get(Tenant, user.tenant_id)
     return AuthResponse(token="", name=user.name, email=user.email,
-                        tenant=tenant.slug if tenant else "")
+                        tenant=tenant.slug if tenant else "", admin=user.is_admin)
 
 
 @router.post("/logout")

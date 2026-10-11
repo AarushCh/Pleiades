@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from api.deps import current_user, get_db, rate_limit
+from api.deps import admin_user, current_user, get_db, rate_limit
 from api.routes_auth import router as auth_router
 from api.schemas import (
     ChatRequest,
@@ -49,7 +49,6 @@ from src.rag import SupportAssistant
 STATE: dict = {}
 DIST = Path(__file__).resolve().parent.parent / "frontend" / "out"
 ORIGINS = config.CORS_ORIGINS
-ADMINS = config.ADMIN_EMAILS
 
 
 @asynccontextmanager
@@ -192,7 +191,7 @@ async def chat(
     question = req.question.strip()
     if not question:
         raise HTTPException(422, "Question is empty")
-    if user.email not in ADMINS:
+    if not user.is_admin:
         rate_limit(f"chat:{user.id}", 6, 60)
         if turns_today(db, user) >= config.CHAT_DAILY_LIMIT:
             raise HTTPException(429, f"You've used today's {config.CHAT_DAILY_LIMIT} questions. "
@@ -352,9 +351,7 @@ def rate(message_id: int, req: FeedbackRequest, user: User = Depends(current_use
 
 
 @app.get("/api/admin/feedback")
-def triage(user: User = Depends(current_user), db: Session = Depends(get_db)) -> list[dict]:
-    if user.email not in ADMINS:
-        raise HTTPException(403, "Admin access required")
+def triage(user: User = Depends(admin_user), db: Session = Depends(get_db)) -> list[dict]:
     rows = db.scalars(select(Message).where(Message.tenant_id == user.tenant_id, Message.rating == -1)
                       .order_by(Message.id.desc()).limit(100)).all()
     return [{
@@ -370,9 +367,7 @@ def triage(user: User = Depends(current_user), db: Session = Depends(get_db)) ->
 
 
 @app.post("/api/admin/reseed")
-async def reseed(user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
-    if user.email not in ADMINS:
-        raise HTTPException(403, "Admin access required")
+async def reseed(user: User = Depends(admin_user), db: Session = Depends(get_db)) -> dict:
     synced = seed_documents(db, user.tenant_id)
     slug = tenant_slug(db, user)
     await asyncio.to_thread(build_index, slug)

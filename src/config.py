@@ -36,7 +36,6 @@ DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 JWT_SECRET = os.getenv("JWT_SECRET", "").strip()
 TOKEN_DAYS = int(os.getenv("TOKEN_DAYS", "7"))
 CHAT_DAILY_LIMIT = int(os.getenv("CHAT_DAILY_LIMIT", "30"))
-ADMIN_EMAILS = {e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()}
 CORS_ORIGINS = [o for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o]
 TRUST_PROXY = os.getenv("TRUST_PROXY", "").strip().lower() in {"1", "true", "yes"}
 

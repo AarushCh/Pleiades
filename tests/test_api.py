@@ -185,15 +185,36 @@ def test_conversation_delete(client, account):
     assert client.get(f"/api/conversations/{target}", headers=account["headers"]).status_code == 404
 
 
+@pytest.fixture
+def promote():
+    from src.db import grant_admin
+
+    promoted = []
+
+    def grant(email: str) -> None:
+        assert grant_admin(email)
+        promoted.append(email)
+
+    yield grant
+    for email in promoted:
+        grant_admin(email, on=False)
+
+
+def test_admin_comes_from_the_account_not_the_email(client, account, promote):
+    assert client.get("/api/auth/me", headers=account["headers"]).json()["admin"] is False
+    promote(account["email"])
+    assert client.get("/api/auth/me", headers=account["headers"]).json()["admin"] is True
+
+
 def test_reseed_requires_an_admin(client, account):
     res = client.post("/api/admin/reseed", headers=account["headers"])
     assert res.status_code == 403
 
 
-def test_reseed_rebuilds_the_live_assistant(client, account, monkeypatch):
+def test_reseed_rebuilds_the_live_assistant(client, account, promote):
     import api.main as main
 
-    monkeypatch.setattr(main, "ADMINS", {account["email"]})
+    promote(account["email"])
     before = main.STATE["bots"][config.DEFAULT_TENANT]
 
     res = client.post("/api/admin/reseed", headers=account["headers"])
@@ -254,9 +275,7 @@ def ask(client, headers, question="What does the RX-900 cost?") -> dict:
     return done
 
 
-def test_answers_can_be_rated_and_complaints_reach_triage(client, account, monkeypatch):
-    import api.main as main
-
+def test_answers_can_be_rated_and_complaints_reach_triage(client, account, promote):
     done = ask(client, account["headers"])
     target = f"/api/messages/{done['message_id']}/feedback"
     assert client.post(target, json={"rating": 0}, headers=account["headers"]).status_code == 422
@@ -268,7 +287,7 @@ def test_answers_can_be_rated_and_complaints_reach_triage(client, account, monke
     assert stored[-1]["rating"] == -1
 
     assert client.get("/api/admin/feedback", headers=account["headers"]).status_code == 403
-    monkeypatch.setattr(main, "ADMINS", {account["email"]})
+    promote(account["email"])
     [newest, *_] = client.get("/api/admin/feedback", headers=account["headers"]).json()
     assert newest["id"] == done["message_id"]
     assert newest["reason"] == "Wrong price"

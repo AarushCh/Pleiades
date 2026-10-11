@@ -147,6 +147,11 @@ only the person who asked can rate it. Admins get the latest complaints in their
 with the question, the answer, the reason and the sources, at `GET /api/admin/feedback`. That
 queue is where new benchmark cases come from.
 
+Admin is a flag on the account, never a property of the email address, because anyone can sign up
+with any address. Sign up first, then grant it from a machine holding the database credentials:
+`python -m src.db admin you@example.com` (add an organisation slug for another organisation, and
+`off` to take it away).
+
 ### Organisations
 
 One deployment serves many organisations, and none of them can see another's data. Every row in

@@ -82,3 +82,9 @@ def current_user(
     if version != user.session_version:
         raise HTTPException(401, "Session expired, sign in again")
     return user
+
+
+def admin_user(user: User = Depends(current_user)) -> User:
+    if not user.is_admin:
+        raise HTTPException(403, "Admin access required")
+    return user

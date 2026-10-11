@@ -13,6 +13,7 @@ from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Integer,
@@ -23,6 +24,7 @@ from sqlalchemy import (
     UniqueConstraint,
     create_engine,
     event,
+    false,
     func,
     inspect,
     select,
@@ -106,6 +108,7 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(120))
     password_hash: Mapped[str] = mapped_column(String(255))
     session_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     conversations: Mapped[list[Conversation]] = relationship(
@@ -392,6 +395,20 @@ def setup(admin_url: str) -> str | None:
     return urlunsplit(parts._replace(netloc=f"{APP_ROLE}:{password}@{host}"))
 
 
+def grant_admin(email: str, tenant: str = config.DEFAULT_TENANT, on: bool = True) -> bool:
+    with SessionLocal() as session:
+        row = session.scalar(select(Tenant).where(Tenant.slug == tenant.strip().lower()))
+        if row is None:
+            return False
+        scope_to_tenant(session, row.id)
+        user = session.scalar(select(User).where(User.tenant_id == row.id, User.email == email.strip().lower()))
+        if user is None:
+            return False
+        user.is_admin = on
+        session.commit()
+        return True
+
+
 def write_env(key: str, value: str) -> None:
     path = config.ROOT / ".env"
     lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
@@ -408,6 +425,13 @@ if __name__ == "__main__" and sys.argv[1:] == ["setup"]:
         write_env("DATABASE_URL", app_url)
         print(f"Created role {APP_ROLE}; its connection string is now DATABASE_URL in .env")
     print(f"Schema '{SCHEMA}': tables, row-level security, grants to {APP_ROLE} and documents are in place")
+elif __name__ == "__main__" and sys.argv[1:2] == ["admin"] and len(sys.argv) in (3, 4, 5):
+    email, *rest = sys.argv[2:]
+    on = "off" not in rest
+    tenant = next((r for r in rest if r != "off"), config.DEFAULT_TENANT)
+    if not grant_admin(email, tenant, on):
+        raise SystemExit(f"No account {email!r} in organisation {tenant!r}; sign up first")
+    print(f"{email} is {'now' if on else 'no longer'} an admin of {tenant}")
 elif __name__ == "__main__":
     init_db()
     with SessionLocal() as s:
