@@ -178,7 +178,7 @@ class SupportAssistant:
             raw = self.expand_chain.invoke({"question": query, "sections": self.sections})
             self.last_error = None
         except Exception as exc:
-            self.last_error = f"Query expansion unavailable: {type(exc).__name__}"
+            self.last_error = f"Query expansion unavailable: {type(exc).__name__}: {exc}"
             return []
         lines = [ln.strip(" -*\t") for ln in raw.splitlines() if ln.strip()]
         queries = [ln for ln in lines if 3 < len(ln) < 160][:3]
