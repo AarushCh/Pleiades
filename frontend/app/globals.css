@@ -1,20 +1,29 @@
 :root {
-  --bg-0: #050914;
-  --bg-1: #0a1024;
-  --ink: #e8ecf6;
-  --ink-dim: #97a2bd;
-  --ink-faint: #5f6b88;
+  color-scheme: light dark;
 
-  --accent: #6098ff;
-  --accent-deep: #2f5fd0;
-  --mint: #7ff0cf;
-  --violet: #a98bff;
-  --danger: #ff8080;
+  --bg-0: light-dark(#eef1f8, #050914);
+  --bg-1: light-dark(#dce4f6, #0a1024);
+  --ink: light-dark(#0f1526, #e8ecf6);
+  --ink-dim: light-dark(#3f4a66, #aab4cc);
+  --ink-faint: light-dark(#59647f, #8892ad);
 
-  --glass: rgba(255, 255, 255, 0.055);
-  --glass-strong: rgba(255, 255, 255, 0.085);
-  --glass-line: rgba(255, 255, 255, 0.11);
-  --glass-line-lit: rgba(96, 152, 255, 0.42);
+  --accent: light-dark(#2f5fd0, #6098ff);
+  --on-accent: light-dark(#ffffff, #04091a);
+  --mint: light-dark(#0a7558, #7ff0cf);
+  --violet: light-dark(#5f3fcc, #a98bff);
+  --danger: light-dark(#b42318, #ff8080);
+  --danger-ink: light-dark(#9a1c13, #ffc9c9);
+
+  --glass: light-dark(rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.055));
+  --glass-strong: light-dark(rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.085));
+  --glass-line: light-dark(rgba(16, 22, 39, 0.13), rgba(255, 255, 255, 0.11));
+  --glass-line-lit: color-mix(in srgb, var(--accent) 45%, transparent);
+  --glass-solid: light-dark(rgba(246, 248, 253, 0.96), rgba(14, 20, 40, 0.92));
+  --well: light-dark(rgba(16, 22, 39, 0.045), rgba(0, 0, 0, 0.22));
+
+  --blob-1: light-dark(#8eaef5, #2f5fd0);
+  --blob-2: light-dark(#86cde6, #1d6b8f);
+  --blob-3: light-dark(#c2b2f7, #5a3fa8);
 
   --blur: 18px;
   --r-sm: 10px;
@@ -26,16 +35,11 @@
 }
 
 :root[data-theme="light"] {
-  --bg-0: #eef1f8;
-  --bg-1: #dfe6f5;
-  --ink: #101627;
-  --ink-dim: #4a5573;
-  --ink-faint: #7b86a3;
+  color-scheme: light;
+}
 
-  --glass: rgba(255, 255, 255, 0.55);
-  --glass-strong: rgba(255, 255, 255, 0.72);
-  --glass-line: rgba(16, 22, 39, 0.1);
-  --glass-line-lit: rgba(47, 95, 208, 0.4);
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 * {
@@ -95,7 +99,7 @@ code {
   height: 46vw;
   left: -8vw;
   top: -10vw;
-  background: radial-gradient(circle, var(--accent-deep), transparent 68%);
+  background: radial-gradient(circle, var(--blob-1), transparent 68%);
   animation: drift1 26s ease-in-out infinite;
 }
 
@@ -104,7 +108,7 @@ code {
   height: 38vw;
   right: -6vw;
   top: 12vh;
-  background: radial-gradient(circle, #1d6b8f, transparent 68%);
+  background: radial-gradient(circle, var(--blob-2), transparent 68%);
   animation: drift2 32s ease-in-out infinite;
 }
 
@@ -113,7 +117,7 @@ code {
   height: 34vw;
   left: 32vw;
   bottom: -14vw;
-  background: radial-gradient(circle, #5a3fa8, transparent 68%);
+  background: radial-gradient(circle, var(--blob-3), transparent 68%);
   animation: drift3 38s ease-in-out infinite;
 }
 
@@ -154,7 +158,7 @@ code {
 
 @supports not (backdrop-filter: blur(1px)) {
   .glass {
-    background: rgba(14, 20, 40, 0.9);
+    background: var(--glass-solid);
   }
 }
 
@@ -201,12 +205,12 @@ code {
 
 .btn3:hover:not(:disabled),
 .btn3:focus-visible:not(:disabled) {
-  color: #04091a;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 
 .btn3--mint {
-  border-color: rgba(127, 240, 207, 0.45);
+  border-color: color-mix(in srgb, var(--mint) 45%, transparent);
 }
 .btn3--mint::before {
   background: var(--mint);
@@ -241,7 +245,8 @@ code {
   padding: 17px 22px;
   border: 0;
   border-radius: var(--r-sm);
-  background: linear-gradient(135deg, rgba(96, 152, 255, 0.17), rgba(127, 240, 207, 0.09));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 17%, transparent),
+    color-mix(in srgb, var(--mint) 9%, transparent));
   border: 1px solid var(--glass-line-lit);
   text-align: left;
   cursor: pointer;
@@ -327,12 +332,12 @@ code {
 .btn12:hover:not(:disabled) .btn12__note,
 .btn12:focus-visible:not(:disabled) .btn12__title,
 .btn12:focus-visible:not(:disabled) .btn12__note {
-  color: #04091a;
+  color: var(--on-accent);
 }
 
 .btn12:hover:not(:disabled) .btn12__rule,
 .btn12:focus-visible:not(:disabled) .btn12__rule {
-  background: #04091a;
+  background: var(--on-accent);
   transform: scaleX(0.62);
 }
 

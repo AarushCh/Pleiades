@@ -32,12 +32,15 @@ export const metadata = {
 export const viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#050914",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#eef1f8" },
+    { media: "(prefers-color-scheme: dark)", color: "#050914" },
+  ],
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" data-theme="dark">
+    <html lang="en">
       <body>
         <div className="scene" aria-hidden="true">
           <div className="scene__blob scene__blob--1" />

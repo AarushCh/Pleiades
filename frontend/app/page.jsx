@@ -60,7 +60,7 @@ export default function Page() {
   const [convoId, setConvoId] = useState(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState(null);
 
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
@@ -95,14 +95,25 @@ export default function Page() {
   }, [messages]);
 
   useEffect(() => {
-    const saved = localStorage.getItem("pleiades.theme");
+    let saved = null;
+    try {
+      saved = localStorage.getItem("pleiades.theme");
+    } catch {}
     if (saved === "light" || saved === "dark") setTheme(saved);
+    else setTheme(matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
   }, []);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem("pleiades.theme", theme);
+    if (theme) document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  const toggleTheme = () => {
+    const next = theme === "light" ? "dark" : "light";
+    setTheme(next);
+    try {
+      localStorage.setItem("pleiades.theme", next);
+    } catch {}
+  };
 
   const send = useCallback(
     async (question) => {
@@ -290,9 +301,9 @@ export default function Page() {
           <Btn3
             variant="quiet"
             size="sm"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            onClick={toggleTheme}
           >
-            {theme === "dark" ? "Light mode" : "Dark mode"}
+            {theme === "light" ? "Dark mode" : "Light mode"}
           </Btn3>
           <Btn3 size="sm" onClick={signOut}>
             Sign out

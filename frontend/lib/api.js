@@ -11,11 +11,12 @@ export function readSession() {
 }
 
 export function writeSession(session) {
-  if (session) {
-    const { name, email, tenant } = session;
-    localStorage.setItem(KEY, JSON.stringify({ name, email, tenant }));
-  }
-  else localStorage.removeItem(KEY);
+  try {
+    if (session) {
+      const { name, email, tenant, admin } = session;
+      localStorage.setItem(KEY, JSON.stringify({ name, email, tenant, admin }));
+    } else localStorage.removeItem(KEY);
+  } catch {}
 }
 
 function expireSession() {
