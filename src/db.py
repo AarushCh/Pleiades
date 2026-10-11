@@ -312,7 +312,7 @@ def init_db() -> str:
         if IS_SQLITE:
             raise
         print(f"Primary database unusable ({type(exc).__name__}: {str(exc).splitlines()[0][:200]}); "
-              "serving from a local SQLite fallback", flush=True)
+              "serving from a local SQLite fallback", file=sys.stderr, flush=True)
     RLS = False
     fallback = create_engine(
         f"sqlite:///{config.ROOT / 'pleiades.db'}",
