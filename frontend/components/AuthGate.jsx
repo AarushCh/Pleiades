@@ -66,19 +66,20 @@ export default function AuthGate({ onAuthenticated }) {
         {isSignup && (
           <label className="field">
             <span>Name</span>
-            <input value={form.name} onChange={set("name")} required maxLength={120} />
+            <input name="name" value={form.name} onChange={set("name")} required maxLength={120} autoComplete="name" />
           </label>
         )}
 
         <label className="field">
           <span>Email</span>
-          <input type="email" value={form.email} onChange={set("email")} required autoComplete="email" />
+          <input type="email" name="email" value={form.email} onChange={set("email")} required autoComplete="email" />
         </label>
 
         <label className="field">
           <span>Password</span>
           <input
             type="password"
+            name="password"
             value={form.password}
             onChange={set("password")}
             required
