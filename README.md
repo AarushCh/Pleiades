@@ -26,7 +26,7 @@ The demo tenant is **Nimbus Networks**, a fictional ISP.
 | `.\run.ps1 dev` | API with reload on `:8000`, Next dev server on `:5173` |
 | `.\run.ps1 demo` | Scripted five-question walkthrough in the terminal |
 | `.\run.ps1 cli` | Interactive terminal client |
-| `.\run.ps1 test` | pytest suite (90 tests) |
+| `.\run.ps1 test` | pytest suite (97 tests) |
 | `.\run.ps1 eval` | Retrieval recall benchmark |
 | `.\run.ps1 backend` | Reports which model is live and makes a test call |
 
@@ -449,7 +449,7 @@ src/cli.py         terminal client
 src/app.py         Streamlit UI (alternative to the Next.js one)
 api/               FastAPI service, SSE streaming, session store
 frontend/          Next.js app router, glass design system
-tests/             90 tests, LLM-dependent ones skip unless a backend answers
+tests/             97 tests, LLM-dependent ones skip unless a backend answers
 training/          training data, the embedder and answering-model fine-tunes, the project assistant
 eval/              retrieval benchmark (dataset.json) and answer benchmark (answers.json)
 ```
