@@ -56,7 +56,7 @@ question ─► condense (if follow-up) ─► expand ─► vector × N + BM25 
 |---|---|---|
 | Orchestration | LangChain (LCEL) and LangGraph | Chains for each model call; a graph for retrieve, draft, verify and hand over |
 | Vector store | ChromaDB, cosine, persisted | Zero-config, embedded, no server |
-| Embeddings | all-MiniLM-L6-v2 via Chroma's ONNX runtime | ~80 MB instead of a multi-GB torch install |
+| Embeddings | Pleiades-Embed (bge-small fine-tuned here, int8 ONNX) via Chroma's ONNX runtime | 34 MB, 30 ms a query on a CPU, trained on the tenant's documents |
 | Generation | Llama 3 (any OpenAI-compatible host, Ollama local) | Open weights, self-hostable for enterprise data |
 | API | FastAPI + SSE | Token streaming, per-session history, OpenAPI docs |
 | UI | Next.js (App Router, static export) | Glass design system, streaming answers, pipeline trace |
@@ -276,8 +276,11 @@ once, after choosing.
 Most of the gain is the training rather than the base model. With query expansion on top, the
 full pipeline still finds the right passage for every held-out question. The int8 export is
 34 MB instead of 133 MB and embeds a query in 30 ms on a CPU with the same recall, so it fits a
-512 MB free instance. Point `EMBED_MODEL_DIR` at the exported folder to use it; nothing else
-changes, and it gets its own collection.
+512 MB free instance. It is published at
+[huggingface.co/AUC6/pleiades-embed](https://huggingface.co/AUC6/pleiades-embed), and the
+Dockerfile downloads it at a pinned revision, so production serves exactly the model that was
+measured. Locally, point `EMBED_MODEL_DIR` at the exported folder; nothing else changes, and it
+gets its own collection. `/api/health` reports which encoder is running.
 
 ### Pleiades-Chat, the answering model (in progress)
 

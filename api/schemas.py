@@ -36,6 +36,7 @@ class HealthResponse(BaseModel):
     has_llm: bool
     top_k: int
     chunks: int
+    embedder: str = "all-MiniLM-L6-v2"
     documents: list[str]
     database: str = "primary"
     llm_failures: list[str] = []

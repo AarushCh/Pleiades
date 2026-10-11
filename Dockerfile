@@ -18,6 +18,14 @@ ENV HOME=/home/pleiades
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+ARG EMBED_REPO=AUC6/pleiades-embed
+ARG EMBED_REVISION=a2a24ce968be8f0fae861b25badf38d20198fa8c
+ENV EMBED_MODEL_DIR=/app/models/pleiades-embed
+RUN mkdir -p "$EMBED_MODEL_DIR/onnx" \
+    && for f in config.json model.onnx special_tokens_map.json tokenizer_config.json tokenizer.json vocab.txt; do \
+         curl -fsSL -o "$EMBED_MODEL_DIR/onnx/$f" "https://huggingface.co/$EMBED_REPO/resolve/$EMBED_REVISION/onnx/$f"; \
+       done
+
 COPY src/ ./src/
 COPY api/ ./api/
 COPY data/ ./data/

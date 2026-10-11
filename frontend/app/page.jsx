@@ -265,7 +265,7 @@ export default function Page() {
               <dt>Generation</dt>
               <dd>{health.backend}</dd>
               <dt>Retrieval</dt>
-              <dd>ChromaDB · all-MiniLM-L6-v2</dd>
+              <dd>ChromaDB · {health.embedder}</dd>
               <dt>Index</dt>
               <dd>
                 {health.chunks} chunks · top-{health.top_k} · cosine

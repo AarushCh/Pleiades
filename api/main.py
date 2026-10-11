@@ -38,6 +38,7 @@ from src.db import (
     scope_to_tenant,
     seed_documents,
 )
+from src.embeddings import embedder_tag
 from src.ingest import build_index
 from src.llm import first_answering
 from src.rag import SupportAssistant
@@ -122,6 +123,7 @@ def health() -> HealthResponse:
         has_llm=not STATE.get("answering", b.backend_name).startswith("Extractive"),
         top_k=b.top_k,
         chunks=len(b.chunks),
+        embedder=embedder_tag() or "all-MiniLM-L6-v2",
         documents=list(config.SOURCE_LABELS.values()),
         database=STATE.get("database", "primary"),
         llm_failures=STATE.get("llm_failures", []),
