@@ -1048,3 +1048,26 @@
 .convo__filter::placeholder {
   color: var(--ink-faint);
 }
+
+.related {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.related span {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.related .tab {
+  border: 1px solid var(--glass-line);
+  color: var(--ink-dim);
+  white-space: normal;
+  text-align: left;
+}

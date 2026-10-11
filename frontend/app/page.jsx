@@ -54,6 +54,19 @@ const SAMPLES = [
   },
 ];
 
+function related(m, asked) {
+  const seen = new Set([(asked || "").trim().toLowerCase(), (m.meta?.sources?.[0]?.section || "").toLowerCase()]);
+  const out = [];
+  for (const s of m.meta?.sources || []) {
+    const q = (s.section || "").trim();
+    if (q.endsWith("?") && (s.score ?? 0) >= 0.45 && !seen.has(q.toLowerCase())) {
+      seen.add(q.toLowerCase());
+      out.push(q);
+    }
+  }
+  return out.slice(0, 3);
+}
+
 export default function Page() {
   const [session, setSession] = useState(undefined);
   const [health, setHealth] = useState(null);
@@ -505,6 +518,16 @@ export default function Page() {
                       {m.outcome === "answered" && (
                         <div className="checked">
                           Every figure checked against the sources{m.attempts > 1 ? " after one redraft" : ""}
+                        </div>
+                      )}
+                      {m.id && !busy && i === messages.length - 1 && related(m, messages[i - 1]?.content).length > 0 && (
+                        <div className="related">
+                          <span>Related</span>
+                          {related(m, messages[i - 1]?.content).map((q) => (
+                            <button key={q} type="button" className="tab" onClick={() => send(q)}>
+                              {q}
+                            </button>
+                          ))}
                         </div>
                       )}
                       {m.id && (
