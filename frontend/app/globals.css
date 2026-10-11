@@ -89,9 +89,10 @@ code {
 .scene__blob {
   position: absolute;
   border-radius: 50%;
-  filter: blur(90px);
   opacity: 0.5;
   will-change: transform;
+  background: radial-gradient(circle closest-side, var(--c), color-mix(in srgb, var(--c) 55%, transparent) 38%,
+    color-mix(in srgb, var(--c) 18%, transparent) 70%, transparent);
 }
 
 .scene__blob--1 {
@@ -99,7 +100,7 @@ code {
   height: 46vw;
   left: -8vw;
   top: -10vw;
-  background: radial-gradient(circle, var(--blob-1), transparent 68%);
+  --c: var(--blob-1);
   animation: drift1 26s ease-in-out infinite;
 }
 
@@ -108,7 +109,7 @@ code {
   height: 38vw;
   right: -6vw;
   top: 12vh;
-  background: radial-gradient(circle, var(--blob-2), transparent 68%);
+  --c: var(--blob-2);
   animation: drift2 32s ease-in-out infinite;
 }
 
@@ -117,7 +118,7 @@ code {
   height: 34vw;
   left: 32vw;
   bottom: -14vw;
-  background: radial-gradient(circle, var(--blob-3), transparent 68%);
+  --c: var(--blob-3);
   animation: drift3 38s ease-in-out infinite;
 }
 
