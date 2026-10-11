@@ -432,3 +432,8 @@ def test_usage_counts_todays_answers_against_the_limit(client):
     assert client.get("/api/usage", headers=headers).json()["used"] == 1
     client.cookies.clear()
     assert client.get("/api/usage").status_code == 401
+
+
+def test_oversized_credentials_are_refused_before_hashing(client):
+    res = client.post("/api/auth/login", json={"email": "a@b.co", "password": "x" * 100_000})
+    assert res.status_code == 422

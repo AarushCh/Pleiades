@@ -24,8 +24,8 @@ class SignupRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: str
-    password: str
+    email: str = Field(max_length=320)
+    password: str = Field(max_length=200)
 
 
 class AuthResponse(BaseModel):
