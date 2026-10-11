@@ -10,6 +10,17 @@ from langchain_core.language_models.llms import LLM
 
 from src import config
 
+COMMON_WORDS = set(
+    "what when where which does have with that this your from there about would could should will into they "
+    "them then than been were their after before also just only much many more most some such very like want "
+    "need still the and for you can how are not but was its our any all get got why who did out one has had "
+    "may now use per yes".split())
+
+
+def _terms(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9]+", text.lower())
+            if (len(w) >= 3 and w not in COMMON_WORDS) or (len(w) >= 2 and any(c.isdigit() for c in w))}
+
 
 class ExtractiveStubLLM(LLM):
     @property
@@ -19,20 +30,29 @@ class ExtractiveStubLLM(LLM):
     def _call(self, prompt: str, stop: Any = None, **kwargs: Any) -> str:
         if "<context>" not in prompt:
             return ""
-        context = re.sub(r"^\[Source:.*$", "", _between(prompt, "<context>", "</context>"), flags=re.M)
-        question = _between(prompt, "<question>", "</question>")
-        if not context.strip():
-            return "I don't have anything in the knowledge base that covers that."
-
-        keywords = {w for w in re.findall(r"[a-z0-9]{4,}", question.lower())}
-        sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n", context) if len(s.strip()) > 30]
+        keywords = _terms(_between(prompt, "<question>", "</question>"))
+        units: list[tuple[str, set[str]]] = []
+        heading: set[str] = set()
+        for block in re.split(r"\n\s*\n", _between(prompt, "<context>", "</context>")):
+            prose: list[str] = []
+            for line in (raw.strip() for raw in block.splitlines()):
+                if line.startswith(("[Source:", "#")):
+                    units += [(s, heading) for s in re.split(r"(?<=[.!?])\s+", " ".join(prose))]
+                    prose = []
+                    heading = _terms(line.partition(">")[2] if line.startswith("[Source:") else line)
+                elif line.startswith("|"):
+                    if not re.fullmatch(r"[|\-:\s]+", line):
+                        units.append((line, heading))
+                elif line:
+                    prose.append(line)
+            units += [(s, heading) for s in re.split(r"(?<=[.!?])\s+", " ".join(prose))]
 
         scored = sorted(
-            ((len(keywords & set(re.findall(r"[a-z0-9]{4,}", s.lower()))), -i, s)
-             for i, s in enumerate(sentences)),
+            ((len(keywords & (_terms(s) | h)), len(keywords & _terms(s)), -i, s.strip())
+             for i, (s, h) in enumerate(units) if len(s.strip()) > 30),
             reverse=True,
         )
-        best = [s for score, _, s in scored[:4] if score > 0]
+        best = [s for score, _, _, s in scored[:4] if score > 0]
         if not best:
             return "I don't have anything in the knowledge base that covers that."
 
