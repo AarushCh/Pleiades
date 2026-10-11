@@ -1015,3 +1015,12 @@
   color: var(--ink);
   background: color-mix(in srgb, var(--accent) 24%, transparent);
 }
+
+.queue__tag {
+  margin-left: 8px;
+  padding: 1px 8px;
+  font-size: 10.5px;
+  color: var(--violet);
+  border: 1px solid color-mix(in srgb, var(--violet) 35%, transparent);
+  border-radius: 20px;
+}

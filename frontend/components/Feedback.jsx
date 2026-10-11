@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { rateAnswer } from "../lib/api";
+import { rateAnswer, requestHandover } from "../lib/api";
 
-export default function Feedback({ id, rating, text }) {
+export default function Feedback({ id, rating, text, handover, escalated }) {
+  const [handed, setHanded] = useState(Boolean(handover));
   const [copied, setCopied] = useState(false);
   const [value, setValue] = useState(rating ?? 0);
   const [asking, setAsking] = useState(false);
@@ -32,6 +33,22 @@ export default function Feedback({ id, rating, text }) {
       >
         {copied ? "Copied" : "Copy"}
       </button>
+      {!escalated &&
+        (handed ? (
+          <span className="feedback__saved">Passed to the support team</span>
+        ) : (
+          <button
+            type="button"
+            className="tab"
+            onClick={() =>
+              requestHandover(id)
+                .then(() => setHanded(true))
+                .catch(() => {})
+            }
+          >
+            Talk to a person
+          </button>
+        ))}
       <button
         type="button"
         className={`tab${value === 1 ? " on" : ""}`}

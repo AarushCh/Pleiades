@@ -18,7 +18,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -353,6 +353,7 @@ def get_conversation(
             latency_ms=m.latency_ms,
             rating=m.rating,
             outcome=m.outcome,
+            handover=m.handover_at is not None,
         )
         for m in convo.messages
     ]
@@ -370,13 +371,26 @@ def delete_conversation(
     return {"deleted": conversation_id}
 
 
-@app.post("/api/messages/{message_id}/feedback")
-def rate(message_id: int, req: FeedbackRequest, user: User = Depends(current_user),
-         db: Session = Depends(get_db)) -> dict:
+def _own_answer(db: Session, user: User, message_id: int) -> Message:
     message = db.get(Message, message_id)
     if (message is None or message.role != "assistant" or message.tenant_id != user.tenant_id
             or message.conversation.user_id != user.id):
         raise HTTPException(404, "Message not found")
+    return message
+
+
+@app.post("/api/messages/{message_id}/handover")
+def request_handover(message_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    message = _own_answer(db, user, message_id)
+    message.handover_at = message.handover_at or now()
+    db.commit()
+    return {"handover": message_id}
+
+
+@app.post("/api/messages/{message_id}/feedback")
+def rate(message_id: int, req: FeedbackRequest, user: User = Depends(current_user),
+         db: Session = Depends(get_db)) -> dict:
+    message = _own_answer(db, user, message_id)
     message.rating = req.rating
     message.feedback = (req.reason or "").strip() or None
     db.commit()
@@ -392,6 +406,7 @@ def _queue(db: Session, rows) -> list[dict]:
         "answer": m.content,
         "reason": m.feedback,
         "email": m.conversation.user.email,
+        "asked_for_person": m.handover_at is not None,
         "sources": json.loads(m.sources) if m.sources else [],
         "created_at": m.created_at,
     } for m in rows]
@@ -406,7 +421,8 @@ def triage(user: User = Depends(admin_user), db: Session = Depends(get_db)) -> l
 @app.get("/api/admin/handovers")
 def handovers(user: User = Depends(admin_user), db: Session = Depends(get_db)) -> list[dict]:
     return _queue(db, db.scalars(select(Message).where(
-        Message.tenant_id == user.tenant_id, Message.outcome == "escalated")
+        Message.tenant_id == user.tenant_id,
+        or_(Message.outcome == "escalated", Message.handover_at.is_not(None)))
         .order_by(Message.id.desc()).limit(100)).all())
 
 
@@ -416,10 +432,12 @@ def overview(days: int = 7, user: User = Depends(admin_user), db: Session = Depe
     recent = (Message.tenant_id == user.tenant_id, Message.role == "assistant",
               Message.created_at >= now() - timedelta(days=days))
     counts = {"questions": 0, "handed_over": 0, "helpful": 0, "not_helpful": 0}
-    for outcome, rating, n in db.execute(select(Message.outcome, Message.rating, func.count())
-                                         .where(*recent).group_by(Message.outcome, Message.rating)):
+    asked = Message.handover_at.is_not(None)
+    for outcome, rating, requested, n in db.execute(
+            select(Message.outcome, Message.rating, asked, func.count())
+            .where(*recent).group_by(Message.outcome, Message.rating, asked)):
         counts["questions"] += n
-        counts["handed_over"] += n if outcome == "escalated" else 0
+        counts["handed_over"] += n if outcome == "escalated" or requested else 0
         counts["helpful"] += n if rating == 1 else 0
         counts["not_helpful"] += n if rating == -1 else 0
     people = db.scalar(select(func.count(func.distinct(Conversation.user_id)))

@@ -26,7 +26,7 @@ The demo tenant is **Nimbus Networks**, a fictional ISP.
 | `.\run.ps1 dev` | API with reload on `:8000`, Next dev server on `:5173` |
 | `.\run.ps1 demo` | Scripted five-question walkthrough in the terminal |
 | `.\run.ps1 cli` | Interactive terminal client |
-| `.\run.ps1 test` | pytest suite (102 tests) |
+| `.\run.ps1 test` | pytest suite (103 tests) |
 | `.\run.ps1 eval` | Retrieval recall benchmark |
 | `.\run.ps1 backend` | Reports which model is live and makes a test call |
 
@@ -158,7 +158,8 @@ were answered without a person, how many were handed over, helpful and not helpf
 people asked), the handover queue (every question the figure check passed to a person, with who
 asked it, at `GET /api/admin/handovers`), the complaints, sign-up access, and an index rebuild.
 Each answer's outcome is stored with it, and a handed-over answer tells the customer it went to
-the support team.
+the support team. Customers can also hand any answer over themselves with Talk to a person
+(`POST /api/messages/{id}/handover`, owner only); those join the same queue, marked as asked for.
 
 ### Organisations
 
@@ -501,7 +502,7 @@ src/cli.py         terminal client
 src/app.py         Streamlit UI (alternative to the Next.js one)
 api/               FastAPI service, SSE streaming, session store
 frontend/          Next.js app router, glass design system
-tests/             102 tests, LLM-dependent ones skip unless a backend answers
+tests/             103 tests, LLM-dependent ones skip unless a backend answers
 training/          training data, the embedder and answering-model fine-tunes, the project assistant
 eval/              retrieval and answer benchmarks, doc2dial recall, Bitext intent coverage
 ```

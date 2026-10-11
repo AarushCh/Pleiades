@@ -46,6 +46,7 @@ export const login = (payload) =>
 
 export const getMe = () => jsonFetch("/api/auth/me");
 export const logout = () => jsonFetch("/api/auth/logout", { method: "POST" });
+export const requestHandover = (id) => jsonFetch(`/api/messages/${id}/handover`, { method: "POST" });
 export const rateAnswer = (id, rating, reason) =>
   jsonFetch(`/api/messages/${id}/feedback`, { method: "POST", body: JSON.stringify({ rating, reason }) });
 export const getHealth = () => jsonFetch("/api/health");

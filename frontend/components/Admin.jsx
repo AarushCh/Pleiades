@@ -28,6 +28,7 @@ function Queue({ rows, empty }) {
         <li key={r.id} className="queue__item">
           <div className="queue__meta">
             {r.email} · {new Date(r.created_at).toLocaleString()}
+            {r.asked_for_person && <span className="queue__tag">asked for a person</span>}
           </div>
           <div className="queue__q">{r.question || "Question not found"}</div>
           {r.reason && <div className="queue__why">“{r.reason}”</div>}
@@ -96,10 +97,10 @@ export default function Admin() {
       <section className="glass panel">
         <div className="details__tabs">
           <button className={`tab ${tab === "handovers" ? "on" : ""}`} onClick={() => setTab("handovers")}>
-            Handed over ({handovers?.length ?? 0})
+            Handed over{handovers ? ` (${handovers.length})` : ""}
           </button>
           <button className={`tab ${tab === "complaints" ? "on" : ""}`} onClick={() => setTab("complaints")}>
-            Not helpful ({complaints?.length ?? 0})
+            Not helpful{complaints ? ` (${complaints.length})` : ""}
           </button>
           {tab === "complaints" && complaints?.length > 0 && (
             <button className="tab tab--end" onClick={() => download(complaints)}>

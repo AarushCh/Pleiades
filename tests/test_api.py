@@ -437,3 +437,24 @@ def test_usage_counts_todays_answers_against_the_limit(client):
 def test_oversized_credentials_are_refused_before_hashing(client):
     res = client.post("/api/auth/login", json={"email": "a@b.co", "password": "x" * 100_000})
     assert res.status_code == 422
+
+
+def test_a_customer_can_ask_for_a_person_and_admins_see_it(client, account, promote):
+    done = ask(client, account["headers"], "Can I speak to someone about my bill?")
+    target = f"/api/messages/{done['message_id']}/handover"
+    stranger = client.post(
+        "/api/auth/signup",
+        json={"name": "Other", "email": f"{uuid.uuid4().hex[:12]}@example.com", "password": "correct-horse"},
+    ).json()
+    client.cookies.clear()
+    assert client.post(target, headers={"Authorization": f"Bearer {stranger['token']}"}).status_code == 404
+    assert client.post(target, headers=account["headers"]).status_code == 200
+    stored = client.get(f"/api/conversations/{done['conversation_id']}", headers=account["headers"]).json()
+    assert stored[-1]["handover"] is True
+
+    promote(account["email"])
+    queue = client.get("/api/admin/handovers", headers=account["headers"]).json()
+    mine = next(q for q in queue if q["id"] == done["message_id"])
+    assert mine["asked_for_person"] is True
+    assert mine["question"] == "Can I speak to someone about my bill?"
+    assert client.get("/api/admin/overview", headers=account["headers"]).json()["handed_over"] >= 1

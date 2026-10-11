@@ -206,6 +206,7 @@ export default function Page() {
               id: m.id,
               rating: m.rating,
               outcome: m.outcome,
+              handover: m.handover,
               content: m.content,
               meta: m.sources
                 ? { sources: m.sources, prompt_tokens: m.prompt_tokens, expansions: [] }
@@ -459,7 +460,16 @@ export default function Page() {
                       Every figure checked against the sources{m.attempts > 1 ? " after one redraft" : ""}
                     </div>
                   )}
-                  {m.id && <Feedback key={m.id} id={m.id} rating={m.rating} text={m.content} />}
+                  {m.id && (
+                    <Feedback
+                      key={m.id}
+                      id={m.id}
+                      rating={m.rating}
+                      text={m.content}
+                      handover={m.handover}
+                      escalated={m.outcome === "escalated"}
+                    />
+                  )}
                 </div>
               </div>
             )

@@ -149,6 +149,7 @@ class Message(Base):
     rating: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     outcome: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    handover_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")

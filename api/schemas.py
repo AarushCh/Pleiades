@@ -61,6 +61,7 @@ class MessageOut(BaseModel):
     latency_ms: int = 0
     rating: int | None = None
     outcome: str | None = None
+    handover: bool = False
 
 
 class FeedbackRequest(BaseModel):

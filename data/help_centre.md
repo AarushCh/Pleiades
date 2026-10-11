@@ -1,10 +1,11 @@
 # Nimbus Networks — Help Centre
 
 ## How do I talk to a person?
-Ask for an agent in this chat at any time, or call the support number printed on every invoice,
-08:00 to 22:00 IST every day. Email support@nimbus.example is answered within 24 hours. Business
-plans get the support response times listed in the product catalog. When the assistant cannot
-confirm an answer against our documentation, it passes the question to the support team itself.
+Choose Talk to a person under any answer in this chat and the support team picks it up, or call the
+support number printed on every invoice, 08:00 to 22:00 IST every day. Email support@nimbus.example
+is answered within 24 hours. Business plans get the support response times listed in the product
+catalog. When the assistant cannot confirm an answer against our documentation, it passes the
+question to the support team itself.
 
 ## How do I raise a complaint, and what if it is not resolved?
 Every contact gets a ticket number in the form TKT-12345; keep it for follow-ups. If a complaint is
