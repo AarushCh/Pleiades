@@ -11,6 +11,7 @@ from src import config
 from src.embeddings import MiniLMEmbeddings, embedder_tag
 
 HEADERS = [("#", "doc_title"), ("##", "section"), ("###", "subsection")]
+BATCH = 5000
 
 
 def collection_for(tenant: str | None = None) -> str:
@@ -107,11 +108,14 @@ def build_index(tenant: str | None = None, rebuild: bool = False) -> Chroma:
     stale = existing - {c.metadata["hash"] for c in chunks}
     new = [c for c in chunks if c.metadata["hash"] not in existing]
 
+    stale_ids = sorted(stale)
+    for i in range(0, len(stale_ids), BATCH):
+        store.delete(ids=stale_ids[i:i + BATCH])
     if stale:
-        store.delete(ids=sorted(stale))
         print(f"Removed {len(stale)} chunks whose documents changed")
+    for i in range(0, len(new), BATCH):
+        store.add_documents(new[i:i + BATCH], ids=[c.metadata["hash"] for c in new[i:i + BATCH]])
     if new:
-        store.add_documents(new, ids=[c.metadata["hash"] for c in new])
         print(f"Embedded and stored {len(new)} new chunks")
     if not stale and not new:
         print("Index already up to date")

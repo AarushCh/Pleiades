@@ -98,6 +98,27 @@ def test_a_changed_chunk_is_removed_not_left_behind(tmp_path, monkeypatch):
     assert before - after
 
 
+def test_a_knowledge_base_bigger_than_one_chroma_batch_is_written_in_batches(tmp_path, monkeypatch):
+    from src import config, ingest
+
+    monkeypatch.setattr(config, "CHROMA_DIR", tmp_path)
+    monkeypatch.setattr(config, "KB_FROM_DB", False)
+    monkeypatch.setattr(ingest, "BATCH", 7)
+    sizes, real = [], ingest.get_vectorstore
+
+    def spy(tenant=None):
+        store = real(tenant)
+        add = store.add_documents
+        store.add_documents = lambda docs, ids: sizes.append(len(docs)) or add(docs, ids=ids)
+        return store
+
+    monkeypatch.setattr(ingest, "get_vectorstore", spy)
+    stored = set(ingest.build_index("batch-test").get(include=[])["ids"])
+    expected = {c.metadata["hash"] for c in ingest.split_documents(ingest.load_documents("batch-test"))}
+    assert stored == expected
+    assert max(sizes) <= 7 < sum(sizes) == len(expected)
+
+
 def test_an_incomplete_trained_embedder_refuses_to_load(tmp_path, monkeypatch):
     import pytest
 
