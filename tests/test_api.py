@@ -458,3 +458,20 @@ def test_a_customer_can_ask_for_a_person_and_admins_see_it(client, account, prom
     assert mine["asked_for_person"] is True
     assert mine["question"] == "Can I speak to someone about my bill?"
     assert client.get("/api/admin/overview", headers=account["headers"]).json()["handed_over"] >= 1
+
+
+def test_only_the_owner_can_rename_a_conversation(client, account):
+    done = ask(client, account["headers"])
+    target = f"/api/conversations/{done['conversation_id']}"
+    res = client.patch(target, json={"title": "  Router   price  "}, headers=account["headers"])
+    assert res.json()["title"] == "Router price"
+    assert client.patch(target, json={"title": "   "}, headers=account["headers"]).status_code == 422
+    other = client.post(
+        "/api/auth/signup",
+        json={"name": "Other", "email": f"{uuid.uuid4().hex[:12]}@example.com", "password": "correct-horse"},
+    ).json()
+    client.cookies.clear()
+    assert client.patch(target, json={"title": "Mine now"},
+                        headers={"Authorization": f"Bearer {other['token']}"}).status_code == 404
+    titles = {c["id"]: c["title"] for c in client.get("/api/conversations", headers=account["headers"]).json()}
+    assert titles[done["conversation_id"]] == "Router price"

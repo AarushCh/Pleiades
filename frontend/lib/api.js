@@ -59,6 +59,8 @@ export const setInviteOnly = (on) => jsonFetch("/api/admin/join-code", { method:
 export const reseed = () => jsonFetch("/api/admin/reseed", { method: "POST" });
 export const listConversations = () => jsonFetch("/api/conversations");
 export const getConversation = (id) => jsonFetch(`/api/conversations/${id}`);
+export const renameConversation = (id, title) =>
+  jsonFetch(`/api/conversations/${id}`, { method: "PATCH", body: JSON.stringify({ title }) });
 export const deleteConversation = (id) =>
   jsonFetch(`/api/conversations/${id}`, { method: "DELETE" });
 

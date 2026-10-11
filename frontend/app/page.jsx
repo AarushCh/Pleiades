@@ -9,6 +9,7 @@ import {
   getUsage,
   listConversations,
   logout,
+  renameConversation,
   readSession,
   streamChat,
   writeSession,
@@ -66,6 +67,9 @@ export default function Page() {
   const [menu, setMenu] = useState(false);
   const [view, setView] = useState("chat");
   const [usage, setUsage] = useState(null);
+  const [filter, setFilter] = useState("");
+  const [editing, setEditing] = useState(null);
+  const [draft, setDraft] = useState("");
 
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
@@ -258,6 +262,13 @@ export default function Page() {
     URL.revokeObjectURL(link.href);
   };
 
+  const saveRename = (e) => {
+    e.preventDefault();
+    const id = editing;
+    setEditing(null);
+    if (draft.trim()) renameConversation(id, draft).then(refreshConvos).catch(() => {});
+  };
+
   const newConvo = () => {
     abortRef.current?.abort();
     setMenu(false);
@@ -297,26 +308,62 @@ export default function Page() {
           <Btn3 variant="quiet" size="sm" onClick={newConvo} style={{ width: "100%", marginBottom: 9 }}>
             New conversation
           </Btn3>
+          {convos.length > 5 && (
+            <input
+              className="convo__filter"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filter conversations"
+              aria-label="Filter conversations"
+            />
+          )}
           <div className="convos">
             {convos.length === 0 && <p className="stage__detail">No history yet</p>}
-            {convos.map((c) => (
-              <div className="convo" key={c.id}>
-                <button
-                  className={`convo__open ${c.id === convoId ? "on" : ""}`}
-                  onClick={() => openConvo(c.id)}
-                  title={c.title}
-                >
-                  {c.title}
-                </button>
-                <button
-                  className="convo__del"
-                  onClick={() => removeConvo(c.id)}
-                  aria-label={`Delete ${c.title}`}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
+            {convos
+              .filter((c) => c.title.toLowerCase().includes(filter.trim().toLowerCase()))
+              .map((c) =>
+                editing === c.id ? (
+                  <form className="convo" key={c.id} onSubmit={saveRename}>
+                    <input
+                      className="convo__filter"
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onBlur={() => setEditing(null)}
+                      onKeyDown={(e) => e.key === "Escape" && setEditing(null)}
+                      maxLength={200}
+                      aria-label="Conversation title"
+                      autoFocus
+                    />
+                  </form>
+                ) : (
+                  <div className="convo" key={c.id}>
+                    <button
+                      className={`convo__open ${c.id === convoId ? "on" : ""}`}
+                      onClick={() => openConvo(c.id)}
+                      title={c.title}
+                    >
+                      {c.title}
+                    </button>
+                    <button
+                      className="convo__del"
+                      onClick={() => {
+                        setDraft(c.title);
+                        setEditing(c.id);
+                      }}
+                      aria-label={`Rename ${c.title}`}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      className="convo__del"
+                      onClick={() => removeConvo(c.id)}
+                      aria-label={`Delete ${c.title}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )
+              )}
           </div>
         </section>
 
@@ -410,102 +457,102 @@ export default function Page() {
             <Admin />
           </div>
         ) : (
-        <>
-        <div className="thread">
-          {messages.length === 0 && (
-            <div className="welcome">
-              <span className="welcome__kicker">Retrieval-Augmented Generation</span>
-              <h2>Ask about billing, hardware, plans or troubleshooting</h2>
-              <p>
-                Every answer is grounded in the knowledge base and cites the document and section
-                it came from. Pick a question to see the retrieval pipeline work.
-              </p>
-              <div className="samples">
-                {SAMPLES.map((s) => (
-                  <Btn12
-                    key={s.title}
-                    title={s.title}
-                    note={s.note}
-                    disabled={busy}
-                    onClick={() => send(s.text)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {messages.map((m, i) =>
-            m.role === "user" ? (
-              <div className="turn--user" key={i}>
-                <div className="bubble">{m.content}</div>
-              </div>
-            ) : (
-              <div className="turn--bot" key={i}>
-                <div className="turn__avatar">P</div>
-                <div className="turn__body">
-                  {m.content ? (
-                    <Markdown text={m.content} />
-                  ) : m.error ? null : (
-                    <div className="dots">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                  )}
-                  {m.error && <div className="alert">{m.error}</div>}
-                  {m.meta && <Details meta={m.meta} totalMs={m.totalMs} question={messages[i - 1]?.content} />}
-                  {m.outcome === "escalated" && <div className="handoff">Passed to the support team</div>}
-                  {m.outcome === "answered" && (
-                    <div className="checked">
-                      Every figure checked against the sources{m.attempts > 1 ? " after one redraft" : ""}
-                    </div>
-                  )}
-                  {m.id && (
-                    <Feedback
-                      key={m.id}
-                      id={m.id}
-                      rating={m.rating}
-                      text={m.content}
-                      handover={m.handover}
-                      escalated={m.outcome === "escalated"}
-                    />
-                  )}
+          <>
+            <div className="thread">
+              {messages.length === 0 && (
+                <div className="welcome">
+                  <span className="welcome__kicker">Retrieval-Augmented Generation</span>
+                  <h2>Ask about billing, hardware, plans or troubleshooting</h2>
+                  <p>
+                    Every answer is grounded in the knowledge base and cites the document and section
+                    it came from. Pick a question to see the retrieval pipeline work.
+                  </p>
+                  <div className="samples">
+                    {SAMPLES.map((s) => (
+                      <Btn12
+                        key={s.title}
+                        title={s.title}
+                        note={s.note}
+                        disabled={busy}
+                        onClick={() => send(s.text)}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )
-          )}
-          <div ref={bottomRef} />
-        </div>
+              )}
 
-        <form
-          className="composer"
-          onSubmit={(e) => {
-            e.preventDefault();
-            send(input);
-          }}
-        >
-          <input
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about billing, hardware, plans, or troubleshooting…"
-            disabled={busy}
-            aria-label="Your question"
-          />
-          {busy ? (
-            <Btn3 onClick={stop}>Stop</Btn3>
-          ) : (
-            <Btn3 type="submit" disabled={!input.trim()}>
-              Send
-            </Btn3>
-          )}
-        </form>
-        {usage?.limit != null && (
-          <p className="quota">
-            {Math.max(0, usage.limit - usage.used)} of {usage.limit} questions left in the last 24 hours
-          </p>
-        )}
-        </>
+              {messages.map((m, i) =>
+                m.role === "user" ? (
+                  <div className="turn--user" key={i}>
+                    <div className="bubble">{m.content}</div>
+                  </div>
+                ) : (
+                  <div className="turn--bot" key={i}>
+                    <div className="turn__avatar">P</div>
+                    <div className="turn__body">
+                      {m.content ? (
+                        <Markdown text={m.content} />
+                      ) : m.error ? null : (
+                        <div className="dots">
+                          <span />
+                          <span />
+                          <span />
+                        </div>
+                      )}
+                      {m.error && <div className="alert">{m.error}</div>}
+                      {m.meta && <Details meta={m.meta} totalMs={m.totalMs} question={messages[i - 1]?.content} />}
+                      {m.outcome === "escalated" && <div className="handoff">Passed to the support team</div>}
+                      {m.outcome === "answered" && (
+                        <div className="checked">
+                          Every figure checked against the sources{m.attempts > 1 ? " after one redraft" : ""}
+                        </div>
+                      )}
+                      {m.id && (
+                        <Feedback
+                          key={m.id}
+                          id={m.id}
+                          rating={m.rating}
+                          text={m.content}
+                          handover={m.handover}
+                          escalated={m.outcome === "escalated"}
+                        />
+                      )}
+                    </div>
+                  </div>
+                )
+              )}
+              <div ref={bottomRef} />
+            </div>
+
+            <form
+              className="composer"
+              onSubmit={(e) => {
+                e.preventDefault();
+                send(input);
+              }}
+            >
+              <input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask about billing, hardware, plans, or troubleshooting…"
+                disabled={busy}
+                aria-label="Your question"
+              />
+              {busy ? (
+                <Btn3 onClick={stop}>Stop</Btn3>
+              ) : (
+                <Btn3 type="submit" disabled={!input.trim()}>
+                  Send
+                </Btn3>
+              )}
+            </form>
+            {usage?.limit != null && (
+              <p className="quota">
+                {Math.max(0, usage.limit - usage.used)} of {usage.limit} questions left in the last 24 hours
+              </p>
+            )}
+          </>
         )}
       </main>
     </div>

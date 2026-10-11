@@ -45,6 +45,10 @@ class HealthResponse(BaseModel):
     rls: bool = False
 
 
+class RenameRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+
+
 class ConversationOut(BaseModel):
     id: int
     title: str

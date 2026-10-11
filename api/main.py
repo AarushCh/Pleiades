@@ -31,6 +31,7 @@ from api.schemas import (
     FeedbackRequest,
     HealthResponse,
     MessageOut,
+    RenameRequest,
     SearchRequest,
     SearchResponse,
 )
@@ -357,6 +358,21 @@ def get_conversation(
         )
         for m in convo.messages
     ]
+
+
+@app.patch("/api/conversations/{conversation_id}")
+def rename_conversation(
+    conversation_id: int,
+    req: RenameRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    title = " ".join(req.title.split())
+    if not title:
+        raise HTTPException(422, "Title is empty")
+    _conversation(db, user, conversation_id).title = title
+    db.commit()
+    return {"id": conversation_id, "title": title}
 
 
 @app.delete("/api/conversations/{conversation_id}")
