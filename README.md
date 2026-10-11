@@ -26,7 +26,7 @@ The demo tenant is **Nimbus Networks**, a fictional ISP.
 | `.\run.ps1 dev` | API with reload on `:8000`, Next dev server on `:5173` |
 | `.\run.ps1 demo` | Scripted five-question walkthrough in the terminal |
 | `.\run.ps1 cli` | Interactive terminal client |
-| `.\run.ps1 test` | pytest suite (97 tests) |
+| `.\run.ps1 test` | pytest suite (99 tests) |
 | `.\run.ps1 eval` | Retrieval recall benchmark |
 | `.\run.ps1 backend` | Reports which model is live and makes a test call |
 
@@ -255,6 +255,33 @@ of the range that works.
 The four cases expansion fixes are exactly the ones plain search gets wrong: the DOA clause,
 the SLA credit table, the payment-failure timeline, and the RMA escalation remedy.
 
+### Measured on someone else's documents
+
+The labelled set above was written for these documents, so it can't show whether the design holds
+up anywhere else. `python eval/doc2dial.py` downloads doc2dial (IBM, CC BY 3.0): 488 support
+documents from four US government services (Social Security, Veterans Affairs, Federal Student Aid
+and a DMV) and conversations whose first question a person wrote while reading the document, with
+the exact span that answers it. All 488 documents become one organisation (3,997 chunks) under the
+production chunker and retrieval, with no model involved, and a question counts as found when a
+retrieved chunk holds its annotated span. Validation split, 661 questions, top 6 (what the model
+reads):
+
+| Encoder | Vector | Keyword | **Hybrid** | Hybrid, right document |
+|---|---|---|---|---|
+| all-MiniLM-L6-v2, stock | 64.1% | 64.0% | 68.7% | 79.7% |
+| bge-small-en-v1.5, stock | 68.5% | 64.0% | 72.3% | 82.3% |
+| Pleiades-Embed, full precision | 71.3% | 64.0% | **74.6%** | 84.7% |
+| Pleiades-Embed, int8 (deployed) | 70.0% | 64.0% | 72.8% | 81.7% |
+
+Fusion beats either retriever alone with every encoder, so hybrid retrieval isn't an artefact of
+the home corpus. Pleiades-Embed saw only Nimbus questions in training and still gains 2.3 points
+over its base on documents it never saw, so one encoder can serve other organisations; on Nimbus
+the training was most of the gain, here the base model is. The int8 export, which matched full
+precision on Nimbus, gives back 1.8 of those points on unfamiliar text; that is the price of
+fitting a 512 MB free instance. First place is the encoder's call, because fusion keeps its top
+two: with MiniLM that put the right passage first 27.2% of the time against keyword search's
+38.4%, and with Pleiades-Embed the two are level (39.0%).
+
 ## Checking the answer before anyone sees it
 
 A model that has the right passage can still write the wrong number. A refund window of 14 days
@@ -441,7 +468,7 @@ lists every model your key can actually reach.
 ## Layout
 
 ```
-data/              enterprise knowledge base (5 markdown documents)
+data/              enterprise knowledge base (6 markdown documents)
 src/config.py      all tunables, .env driven
 src/embeddings.py  LangChain Embeddings over Chroma's ONNX MiniLM
 src/ingest.py      load → chunk → embed → persist (idempotent, --rebuild to wipe)
@@ -456,15 +483,30 @@ src/cli.py         terminal client
 src/app.py         Streamlit UI (alternative to the Next.js one)
 api/               FastAPI service, SSE streaming, session store
 frontend/          Next.js app router, glass design system
-tests/             97 tests, LLM-dependent ones skip unless a backend answers
+tests/             99 tests, LLM-dependent ones skip unless a backend answers
 training/          training data, the embedder and answering-model fine-tunes, the project assistant
-eval/              retrieval benchmark (dataset.json) and answer benchmark (answers.json)
+eval/              retrieval and answer benchmarks, doc2dial recall, Bitext intent coverage
 ```
 
 ## Adding your own knowledge base
 
 Drop `.md` files into `data/`, add a display name to `SOURCE_LABELS` in `src/config.py`, and
 re-run `python -m src.ingest`. Only new chunks are embedded.
+
+### Finding what it doesn't cover
+
+`python eval/coverage.py` samples 60 phrasings from each of the 26 intents in Bitext's telecom
+support set (CDLA-Sharing-1.0, downloaded when run, never committed) and reports which section
+retrieval lands on for each. Its first run on the original five documents found that nothing
+answered "how do I talk to a person" (78% of those questions landed on old tickets), that
+"I want compensation for the outage" missed the SLA credits because the documents only say
+"refund for downtime", and that "deactivate my phone" retrieved router factory-reset steps 93% of
+the time, from an ISP that sells no phones. `data/help_centre.md` was written from that list, in
+the customers' own words, with every figure agreeing with the other documents; those intents now
+reach the right section 65-100% of the time, and the 15-question set above is unchanged.
+
+A new or changed document reaches a running deployment through `python -m src.db setup` or the
+admin console's index rebuild, which copy `data/` into the organisation's documents.
 
 ## Demo script
 
