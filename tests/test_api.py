@@ -340,3 +340,12 @@ def test_a_failing_answer_does_not_leak_internals(client, account, monkeypatch, 
     assert "event: error" in body
     assert "hunter2" not in body and "db.internal" not in body
     assert "hunter2" in capsys.readouterr().err
+
+
+def test_pages_and_api_carry_security_headers(client):
+    for path in ("/api/health", "/"):
+        headers = client.get(path).headers
+        policy = headers["content-security-policy"]
+        assert "frame-ancestors 'none'" in policy and "unsafe-inline" not in policy.split("style-src")[0]
+        assert headers["x-content-type-options"] == "nosniff"
+        assert headers["strict-transport-security"].startswith("max-age=")

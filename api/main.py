@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import json
+import re
 import sys
 import time
 import traceback
 from contextlib import asynccontextmanager
 from datetime import timedelta
+from functools import cache
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -81,7 +85,20 @@ app.add_middleware(
 
 app.include_router(auth_router)
 
+
+@cache
+def content_security_policy(_built: int) -> str:
+    bodies = {b for page in DIST.glob("**/*.html")
+              for b in re.findall(r"<script>(.*?)</script>", page.read_text(encoding="utf-8"), re.S)}
+    hashes = " ".join(sorted(f"'sha256-{base64.b64encode(hashlib.sha256(b.encode()).digest()).decode()}'"
+                             for b in bodies))
+    return (f"default-src 'self'; script-src 'self' {hashes}; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; "
+            "form-action 'self'; frame-ancestors 'none'")
+
+
 SECURITY_HEADERS = {
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "no-referrer",
@@ -93,6 +110,9 @@ SECURITY_HEADERS = {
 async def security_headers(request, call_next):
     response = await call_next(request)
     response.headers.update(SECURITY_HEADERS)
+    index = DIST / "index.html"
+    response.headers["Content-Security-Policy"] = content_security_policy(
+        index.stat().st_mtime_ns if index.exists() else 0)
     return response
 
 
