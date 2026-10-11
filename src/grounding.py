@@ -12,6 +12,7 @@ WORDS = {w: i for i, w in enumerate(UNITS)} | {w: 10 * i for i, w in enumerate(T
     w: i for i, w in enumerate(ORDINALS, 1)} | {"dozen": 12}
 SPELLED = re.compile(rf"\b({'|'.join(TENS)})[- ]({'|'.join(UNITS[1:10])})\b|\b({'|'.join(WORDS)})\b", re.I)
 SCALES = {"hundred": 100, "thousand": 1000, "lakh": 10**5, "million": 10**6, "crore": 10**7, "billion": 10**9}
+HUNDREDS = re.compile(rf"\b({'|'.join(UNITS[1:10])}) hundred\b", re.I)
 SCALED = re.compile(rf"(\d[\d,]*(?:\.\d+)?)\s*({'|'.join(SCALES)})\b", re.I)
 CLOCK = re.compile(r"\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s*([ap])\.?m\b\.?", re.I)
 
@@ -33,7 +34,7 @@ def figures(text: str) -> set[str]:
 
 def spelled(text: str) -> set[str]:
     out = {str(WORDS[a.lower()] + WORDS[b.lower()]) if a else str(WORDS[w.lower()])
-           for a, b, w in SPELLED.findall(text)}
+           for a, b, w in SPELLED.findall(text)} | {str(100 * WORDS[n.lower()]) for n in HUNDREDS.findall(text)}
     return out | {_normalise(f"{float(n.replace(',', '')) * SCALES[s.lower()]:.2f}") for n, s in SCALED.findall(text)}
 
 

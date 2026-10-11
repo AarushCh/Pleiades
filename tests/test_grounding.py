@@ -36,6 +36,7 @@ def test_numbers_the_context_spells_out_support_digits_in_the_answer():
     answer = "Refunds take 7 days in 23 regions; the 3rd reminder is final for 1,500,000 users and 200,000 more."
     assert unsupported(answer, context) == []
     assert unsupported("It takes 8 days.", context) == ["8"]
+    assert unsupported("The 100th anniversary.", "One hundred years ago today.") == []
     assert figures("seven days") == set()
 
 
