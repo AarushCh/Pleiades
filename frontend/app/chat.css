@@ -1024,3 +1024,9 @@
   border: 1px solid color-mix(in srgb, var(--violet) 35%, transparent);
   border-radius: 20px;
 }
+
+@media (max-width: 520px) {
+  .topbar p {
+    display: none;
+  }
+}
