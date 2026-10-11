@@ -56,7 +56,7 @@ export default function Feedback({ id, rating }) {
             autoFocus
           />
           <button type="submit" className="tab on">
-            Send
+            Send feedback
           </button>
         </form>
       ) : (
