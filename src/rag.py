@@ -8,7 +8,7 @@ from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
-from src import config
+from src import config, sla
 from src.ingest import get_vectorstore
 from src.llm import get_llm, get_llm_with_fallbacks
 
@@ -61,7 +61,7 @@ REFERENTIAL = re.compile(
 )
 
 
-def format_context(docs: list[Document]) -> str:
+def format_context(docs: list[Document], facts: list[str] | tuple = ()) -> str:
     blocks, seen = [], set()
     for d in docs:
         body = d.page_content.strip()
@@ -72,6 +72,7 @@ def format_context(docs: list[Document]) -> str:
         section = d.metadata.get("section") or d.metadata.get("doc_title") or ""
         head = f"[Source: {label}" + (f" > {section}]" if section else "]")
         blocks.append(f"{head}\n{body}")
+    blocks += [f"[Calculation, exact]\n{f}" for f in facts]
     return "\n\n".join(blocks)
 
 
@@ -102,6 +103,7 @@ class Retrieval:
     query: str
     condensed: bool
     expansions: list[str]
+    facts: list[str] = field(default_factory=list)
 
 
 def rrf(ranked_lists: list[list[str]], k: int = 60) -> dict[str, float]:
@@ -238,12 +240,12 @@ class SupportAssistant:
 
         docs = [self.by_hash[h] for h in top if h in self.by_hash]
         scores = [sims.get(h) for h in top if h in self.by_hash]
-        return Retrieval(docs, scores, query, condensed, expansions)
+        return Retrieval(docs, scores, query, condensed, expansions, sla.facts(f"{question}\n{query}", docs))
 
     def _payload(self, question: str, r: Retrieval,
                  history: list[tuple[str, str]] | None = None) -> dict:
         return {
-            "context": format_context(r.docs),
+            "context": format_context(r.docs, r.facts),
             "history": format_history(self.history if history is None else history),
             "question": question,
         }

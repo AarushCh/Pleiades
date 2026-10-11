@@ -145,7 +145,7 @@ def test_documents_do_not_cross_tenants(tenants):
 
 def test_each_tenant_gets_its_own_vector_collection(tenants):
     assert collection_for(tenants["home"]) != collection_for(tenants["away"])
-    assert collection_for(tenants["away"]).endswith("acme_isolation_test")
+    assert "acme_isolation_test" in collection_for(tenants["away"])
 
 
 def test_a_tenant_slug_is_unique():

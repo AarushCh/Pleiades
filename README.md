@@ -22,11 +22,11 @@ The demo tenant is **Nimbus Networks**, a fictional ISP.
 
 | Command | What it does |
 |---|---|
-| `.\run.ps1` | Builds the Next.js UI and serves API + UI on `:8000` |
+| `.\run.ps1` | Builds the Next.js UI and serves API + UI on `:8000`, reloading on backend edits |
 | `.\run.ps1 dev` | API with reload on `:8000`, Next dev server on `:5173` |
 | `.\run.ps1 demo` | Scripted five-question walkthrough in the terminal |
 | `.\run.ps1 cli` | Interactive terminal client |
-| `.\run.ps1 test` | pytest suite (61 tests) |
+| `.\run.ps1 test` | pytest suite (82 tests) |
 | `.\run.ps1 eval` | Retrieval recall benchmark |
 | `.\run.ps1 backend` | Reports which model is live and makes a test call |
 
@@ -233,10 +233,11 @@ So the answer isn't streamed as it's written. `src/graph.py` runs each turn as a
 
 The `done` event carries the outcome, the figures that failed and how many drafts it took.
 
-What it doesn't catch yet: figures written as words ("seven days"), and arithmetic. A
-correctly derived 90.4% uptime gets flagged because 90.4 doesn't appear in any source.
-That's deliberate for now. The fix is to do the calculation in code and let the model explain
-the result.
+Arithmetic is done in code, not by the model. When a customer gives an outage length and the
+retrieved documents include an uptime-to-credit table, `src/sla.py` reads that table, works out
+the month's uptime over 30 days and picks the row. The result goes into the context marked as
+an exact calculation, so the model quotes it and the figure check accepts it. What the check
+still doesn't catch: figures written as words ("seven days").
 
 ## Our own models
 
@@ -338,10 +339,11 @@ no fallbacks, paced under the free tier's rate limits so latency means model tim
 | openai/gpt-oss-20b | 82.4% | 1.07 s | 2.29 s |
 
 Every failure was read before it counted, and two early "failures" turned out to be the eval
-being stricter than the documents, so the eval was fixed. The one question qwen gets wrong is
+being stricter than the documents, so the eval was fixed. The one question qwen got wrong was
 the SLA credit: three days down is exactly 90.0% uptime, which earns 50%, and it chose the
-"below 90%" row. Both figures are in the source, so the figure check can't catch it; the fix is
-to do that lookup in code.
+"below 90%" row. Both figures are in the source, so the figure check couldn't catch it. That
+lookup now happens in code and the answer comes back right. No other question in the benchmark
+triggers the calculation, so their prompts are unchanged.
 
 ## Backends and failover
 
@@ -390,7 +392,7 @@ src/cli.py         terminal client
 src/app.py         Streamlit UI (alternative to the Next.js one)
 api/               FastAPI service, SSE streaming, session store
 frontend/          Next.js app router, glass design system
-tests/             61 tests, LLM-dependent ones skip unless a backend answers
+tests/             82 tests, LLM-dependent ones skip unless a backend answers
 training/          training data, the embedder and answering-model fine-tunes, the project assistant
 eval/              retrieval benchmark (dataset.json) and answer benchmark (answers.json)
 ```
@@ -410,9 +412,9 @@ re-run `python -m src.ingest`. Only new chunks are embedded.
    from the RMA section alone tells the customer to run triage, which is wrong.
 3. **Structured lookup.** Plan comparison retrieves the catalog table.
 4. **Multi-document arithmetic.** "Down 3 days last month" needs the billing FAQ and the SLA
-   table in the catalog together. Models like to work out an uptime figure such as 90.4%, which
-   no source contains, so the check sends that draft back and the redraft has to quote the
-   credit band from the table, or the customer is handed to a person.
+   table in the catalog together. The uptime (90.0%) and the credit row (50%) are worked out in
+   code and handed to the model as an exact calculation, so it explains the result instead of
+   doing the sum itself.
 5. **Refusal.** An out-of-scope question returns a one-line refusal and a human handoff
    instead of answering from the model's own knowledge.
 

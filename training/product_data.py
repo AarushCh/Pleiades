@@ -102,9 +102,10 @@ def patient(call, bot=None):
                 raise
             message = str(exc)
         wait = wait_hint(message)
-        if "per day" in message and wait > 600:
+        if "per day" in message and wait > 3 * 3600:
             raise SystemExit(f"The teacher's free daily token cap is used up; run again in {wait / 3600:.1f} h, "
                              "and it resumes where it stopped")
+        print(f"  rate limited, waiting {wait / 60:.1f} min", flush=True)
         time.sleep(wait + 2)
     raise RuntimeError("Still rate limited after eight attempts")
 
@@ -126,7 +127,7 @@ def distill(bot, pause: float) -> None:
                 del bot._expand
             f.write(json.dumps({
                 "question": question, "expansions": expansions, "answer": turn["answer"],
-                "outcome": turn["outcome"], "attempts": turn["attempts"],
+                "outcome": turn["outcome"], "attempts": turn["attempts"], "facts": turn["retrieval"].facts,
                 "context": [d.metadata["hash"] for d in turn["retrieval"].docs]}, ensure_ascii=False) + "\n")
             f.flush()
             print(f"  [{i}/{len(todo)}] {turn['outcome']} drafts={turn['attempts']} expansions={len(expansions)}")
@@ -165,7 +166,7 @@ def assemble_sft(bot) -> None:
         if rec["outcome"] != "answered" or rec["attempts"] != 1 or len(docs) != len(rec["context"]):
             stats["dropped"] += 1
             continue
-        payload = {"context": format_context(docs), "history": format_history([]), "question": rec["question"]}
+        payload = {"context": format_context(docs, rec.get("facts", [])), "history": format_history([]), "question": rec["question"]}
         rows[split].append(sample(ANSWER_PROMPT.format_messages(**payload), rec["answer"]))
         stats["answers"] += 1
     for split, data in rows.items():

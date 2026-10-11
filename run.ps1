@@ -18,7 +18,7 @@ switch ($target) {
             Pop-Location
         }
         Write-Host "http://localhost:8000" -ForegroundColor Green
-        & $py -m uvicorn api.main:app --port 8000
+        & $py -m uvicorn api.main:app --port 8000 --reload --reload-dir api --reload-dir src
     }
     "build" {
         Push-Location frontend

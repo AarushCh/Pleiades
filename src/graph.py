@@ -44,7 +44,7 @@ def build_graph(bot):
 
     def verify(turn: Turn) -> Turn:
         grounds = (
-            format_context(turn["retrieval"].docs),
+            format_context(turn["retrieval"].docs, turn["retrieval"].facts),
             turn["question"],
             format_history(turn.get("history", [])),
         )
