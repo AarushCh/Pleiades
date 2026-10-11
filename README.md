@@ -516,6 +516,19 @@ training/          training data, the embedder and answering-model fine-tunes, t
 eval/              retrieval and answer benchmarks, doc2dial recall, Bitext intent coverage
 ```
 
+## Data and licences
+
+| Source | Licence | Used for | In this repository |
+|---|---|---|---|
+| `data/*.md`, the Nimbus Networks documents | Written for this project; Nimbus is fictional | The demo organisation's knowledge base | Yes |
+| `eval/dataset.json`, `eval/answers.json` | Written for this project | Retrieval and answer benchmarks | Yes |
+| [doc2dial](https://doc2dial.github.io) (IBM, Feng et al., EMNLP 2020) | CC BY 3.0 | Retrieval benchmark on outside documents (`eval/doc2dial.py`) | No, downloaded when run |
+| [Bitext Telco](https://huggingface.co/datasets/bitext/Bitext-telco-llm-chatbot-training-dataset) | CDLA-Sharing-1.0 | Coverage audit of the knowledge base (`eval/coverage.py`) | No, downloaded when run |
+| Training pairs and distilled answers | Generated from the Nimbus documents by the teacher model | Fine-tuning Pleiades-Embed and Pleiades-Chat | No, `training/build/` |
+
+Nothing downloaded is committed or redistributed; the two evaluation scripts fetch pinned copies
+into the git-ignored `eval/external/`.
+
 ## Adding your own knowledge base
 
 Drop `.md` files into `data/`, add a display name to `SOURCE_LABELS` in `src/config.py`, and
