@@ -774,3 +774,35 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.feedback__why {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+  min-width: 220px;
+}
+
+.feedback__why input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--glass-line);
+  border-radius: 7px;
+  background: var(--glass-strong);
+  color: var(--ink);
+  font: inherit;
+  font-size: 11.5px;
+}
+
+.feedback__saved {
+  padding-left: 6px;
+  font-size: 11px;
+  color: var(--ink-faint);
+}

@@ -22,6 +22,7 @@ from api.routes_auth import router as auth_router
 from api.schemas import (
     ChatRequest,
     ConversationOut,
+    FeedbackRequest,
     HealthResponse,
     MessageOut,
     SearchRequest,
@@ -245,6 +246,7 @@ async def chat(
             yield sse("token", {"text": answer})
         elapsed = round((time.perf_counter() - start) * 1000)
 
+        message_id = None
         if answer and r is not None:
             with SessionLocal() as write:
                 scope_to_tenant(write, tenant_id)
@@ -252,7 +254,7 @@ async def chat(
                 if convo_row is not None:
                     write.add(Message(tenant_id=convo_row.tenant_id,
                                       conversation_id=convo_id, role="user", content=question))
-                    write.add(Message(
+                    reply = Message(
                         tenant_id=convo_row.tenant_id,
                         conversation_id=convo_id,
                         role="assistant",
@@ -260,15 +262,18 @@ async def chat(
                         sources=json.dumps(b.sources(r), ensure_ascii=False),
                         prompt_tokens=tokens,
                         latency_ms=elapsed,
-                    ))
+                    )
+                    write.add(reply)
                     if is_first:
                         convo_row.title = question[:80]
                     convo_row.updated_at = now()
                     write.commit()
+                    message_id = reply.id
 
         yield sse("done", {
             "total_ms": elapsed,
             "conversation_id": convo_id,
+            "message_id": message_id,
             "outcome": turn.get("outcome"),
             "unsupported": turn.get("unsupported", []),
             "attempts": turn.get("attempts", 0),
@@ -306,11 +311,13 @@ def get_conversation(
     convo = _conversation(db, user, conversation_id)
     return [
         MessageOut(
+            id=m.id,
             role=m.role,
             content=m.content,
             sources=json.loads(m.sources) if m.sources else None,
             prompt_tokens=m.prompt_tokens,
             latency_ms=m.latency_ms,
+            rating=m.rating,
         )
         for m in convo.messages
     ]
@@ -326,6 +333,37 @@ def delete_conversation(
     db.delete(convo)
     db.commit()
     return {"deleted": conversation_id}
+
+
+@app.post("/api/messages/{message_id}/feedback")
+def rate(message_id: int, req: FeedbackRequest, user: User = Depends(current_user),
+         db: Session = Depends(get_db)) -> dict:
+    message = db.get(Message, message_id)
+    if (message is None or message.role != "assistant" or message.tenant_id != user.tenant_id
+            or message.conversation.user_id != user.id):
+        raise HTTPException(404, "Message not found")
+    message.rating = req.rating
+    message.feedback = (req.reason or "").strip() or None
+    db.commit()
+    return {"rated": message_id}
+
+
+@app.get("/api/admin/feedback")
+def triage(user: User = Depends(current_user), db: Session = Depends(get_db)) -> list[dict]:
+    if user.email not in ADMINS:
+        raise HTTPException(403, "Admin access required")
+    rows = db.scalars(select(Message).where(Message.tenant_id == user.tenant_id, Message.rating == -1)
+                      .order_by(Message.id.desc()).limit(100)).all()
+    return [{
+        "id": m.id,
+        "question": db.scalar(select(Message.content).where(
+            Message.conversation_id == m.conversation_id, Message.role == "user", Message.id < m.id)
+            .order_by(Message.id.desc()).limit(1)),
+        "answer": m.content,
+        "reason": m.feedback,
+        "sources": json.loads(m.sources) if m.sources else [],
+        "created_at": m.created_at,
+    } for m in rows]
 
 
 @app.post("/api/admin/reseed")

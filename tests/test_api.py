@@ -241,3 +241,47 @@ def test_sign_out_revokes_the_cookie_and_every_earlier_token(client):
     assert client.post("/api/auth/logout").status_code == 200
     assert client.get("/api/auth/me").status_code == 401
     assert client.get("/api/auth/me", headers=earlier).status_code == 401
+
+
+def ask(client, headers, question="What does the RX-900 cost?") -> dict:
+    done, pending = None, None
+    with client.stream("POST", "/api/chat", json={"question": question}, headers=headers) as res:
+        for line in res.iter_lines():
+            if line.startswith("event:"):
+                pending = line.split(":", 1)[1].strip()
+            elif line.startswith("data:") and pending == "done":
+                done = json.loads(line.split(":", 1)[1].strip())
+    return done
+
+
+def test_answers_can_be_rated_and_complaints_reach_triage(client, account, monkeypatch):
+    import api.main as main
+
+    done = ask(client, account["headers"])
+    target = f"/api/messages/{done['message_id']}/feedback"
+    assert client.post(target, json={"rating": 0}, headers=account["headers"]).status_code == 422
+    res = client.post(target, json={"rating": -1, "reason": "Wrong price"}, headers=account["headers"])
+    assert res.status_code == 200
+
+    stored = client.get(f"/api/conversations/{done['conversation_id']}", headers=account["headers"]).json()
+    assert stored[-1]["id"] == done["message_id"]
+    assert stored[-1]["rating"] == -1
+
+    assert client.get("/api/admin/feedback", headers=account["headers"]).status_code == 403
+    monkeypatch.setattr(main, "ADMINS", {account["email"]})
+    [newest, *_] = client.get("/api/admin/feedback", headers=account["headers"]).json()
+    assert newest["id"] == done["message_id"]
+    assert newest["reason"] == "Wrong price"
+    assert newest["question"] == "What does the RX-900 cost?"
+
+
+def test_only_the_owner_can_rate_an_answer(client, account):
+    done = ask(client, account["headers"])
+    other = client.post(
+        "/api/auth/signup",
+        json={"name": "Rater", "email": f"{uuid.uuid4().hex[:12]}@example.com", "password": "correct-horse"},
+    ).json()
+    res = client.post(f"/api/messages/{done['message_id']}/feedback", json={"rating": 1},
+                      headers={"Authorization": f"Bearer {other['token']}"})
+    assert res.status_code == 404
+

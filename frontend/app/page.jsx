@@ -15,6 +15,7 @@ import {
 import AuthGate from "../components/AuthGate";
 import { Btn3, Btn12 } from "../components/Buttons";
 import Details from "../components/Details";
+import Feedback from "../components/Feedback";
 import Markdown from "../components/Markdown";
 
 const SAMPLES = [
@@ -139,8 +140,8 @@ export default function Page() {
               next[next.length - 1] = { ...last, content: last.content + text };
               return next;
             }),
-          onDone: () => {
-            patch({ totalMs: performance.now() - started });
+          onDone: (done) => {
+            patch({ totalMs: performance.now() - started, id: done.message_id, rating: null });
             refreshConvos();
           },
           onError: (message) => patch({ error: message }),
@@ -172,6 +173,8 @@ export default function Page() {
           ? { role: "user", content: m.content }
           : {
               role: "bot",
+              id: m.id,
+              rating: m.rating,
               content: m.content,
               meta: m.sources
                 ? { sources: m.sources, prompt_tokens: m.prompt_tokens, expansions: [] }
@@ -352,6 +355,7 @@ export default function Page() {
                   )}
                   {m.error && <div className="alert">{m.error}</div>}
                   {m.meta && <Details meta={m.meta} totalMs={m.totalMs} />}
+                  {m.id && <Feedback key={m.id} id={m.id} rating={m.rating} />}
                 </div>
               </div>
             )

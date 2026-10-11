@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -50,8 +51,15 @@ class ConversationOut(BaseModel):
 
 
 class MessageOut(BaseModel):
+    id: int
     role: str
     content: str
     sources: list[SourceOut] | None = None
     prompt_tokens: int = 0
     latency_ms: int = 0
+    rating: int | None = None
+
+
+class FeedbackRequest(BaseModel):
+    rating: Literal[1, -1]
+    reason: str | None = Field(default=None, max_length=500)

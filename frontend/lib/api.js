@@ -45,6 +45,8 @@ export const login = (payload) =>
 
 export const getMe = () => jsonFetch("/api/auth/me");
 export const logout = () => jsonFetch("/api/auth/logout", { method: "POST" });
+export const rateAnswer = (id, rating, reason) =>
+  jsonFetch(`/api/messages/${id}/feedback`, { method: "POST", body: JSON.stringify({ rating, reason }) });
 export const getHealth = () => jsonFetch("/api/health");
 export const listConversations = () => jsonFetch("/api/conversations");
 export const getConversation = (id) => jsonFetch(`/api/conversations/${id}`);
