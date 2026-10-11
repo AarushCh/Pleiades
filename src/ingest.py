@@ -72,12 +72,15 @@ def split_documents(docs: list[Document]) -> list[Document]:
             section.metadata = {**doc.metadata, **section.metadata}
             chunks.extend(size_splitter.split_documents([section]))
 
-    for i, c in enumerate(chunks):
-        c.metadata["chunk_id"] = i
+    unique: dict[str, Document] = {}
+    for c in chunks:
         c.metadata["hash"] = hashlib.sha256(
             (c.metadata["filename"] + c.page_content).encode("utf-8")
         ).hexdigest()[:16]
-    return chunks
+        unique.setdefault(c.metadata["hash"], c)
+    for i, c in enumerate(unique.values()):
+        c.metadata["chunk_id"] = i
+    return list(unique.values())
 
 
 def get_vectorstore(tenant: str | None = None) -> Chroma:

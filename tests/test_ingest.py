@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from langchain_core.documents import Document
+
 from src import config
 from src.embeddings import MiniLMEmbeddings
 from src.ingest import load_documents, split_documents
@@ -119,3 +121,13 @@ def test_each_embedder_gets_its_own_collection(monkeypatch):
     stock = ingest.collection_for("nimbus")
     monkeypatch.setattr(config, "EMBED_MODEL_DIR", "/models/pleiades-embed-v1")
     assert ingest.collection_for("nimbus") == f"{stock}_pleiades_embed_v1"
+
+
+def test_a_paragraph_repeated_in_one_document_is_indexed_once():
+    notice = "Calls may be recorded for quality and training purposes. " * 15
+    refunds = "Refunds reach the original payment method within 7 working days. " * 12
+    intro = "This policy covers every residential and business plan. " * 14
+    doc = Document(page_content=f"# Policy\n\n{intro}\n\n{notice}\n\n{refunds}\n\n{notice}",
+                   metadata={"filename": "policy.md", "source_label": "Policy"})
+    hashes = [c.metadata["hash"] for c in split_documents([doc])]
+    assert len(hashes) == len(set(hashes))
