@@ -66,6 +66,7 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 SOURCE_LABELS = {
     "faq_billing.md": "Billing FAQ",
+    "help_centre.md": "Help Centre",
     "manual_nimbus_router.md": "RX-500/RX-900 Router Manual",
     "policy_returns_warranty.md": "Returns & Warranty Policy (POL-RW-004)",
     "product_catalog.md": "Product & Plan Catalog 2026",

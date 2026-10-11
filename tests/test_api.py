@@ -108,7 +108,7 @@ def test_health_is_public(client):
     body = client.get("/api/health").json()
     assert body["status"] == "ok"
     assert body["chunks"] > 0
-    assert len(body["documents"]) == 5
+    assert len(body["documents"]) == len(list(config.DATA_DIR.glob("**/*.md")))
     assert client.head("/api/health").status_code == 200
 
 
