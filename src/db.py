@@ -7,6 +7,10 @@ import sys
 from datetime import UTC, datetime
 from urllib.parse import urlsplit, urlunsplit
 
+from alembic import command
+from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from sqlalchemy import (
     DateTime,
     ForeignKey,
@@ -18,6 +22,7 @@ from sqlalchemy import (
     create_engine,
     event,
     func,
+    inspect,
     select,
     text,
 )
@@ -171,7 +176,36 @@ def create_schema(bind) -> None:
         with bind.begin() as conn:
             if conn.execute(text("SELECT 1 FROM pg_namespace WHERE nspname = :s"), {"s": SCHEMA}).first() is None:
                 conn.execute(text(f'CREATE SCHEMA "{SCHEMA}"'))
-    Base.metadata.create_all(bind)
+
+
+def alembic_config(connection=None) -> Config:
+    cfg = Config()
+    cfg.set_main_option("script_location", str(config.ROOT / "src" / "migrations"))
+    cfg.attributes["connection"] = connection
+    return cfg
+
+
+def head() -> str:
+    return ScriptDirectory.from_config(alembic_config()).get_current_head()
+
+
+def _schema_for(conn) -> str | None:
+    return None if conn.dialect.name == "sqlite" else SCHEMA
+
+
+def revision(bind) -> str | None:
+    with bind.connect() as conn:
+        return MigrationContext.configure(
+            conn, opts={"version_table_schema": _schema_for(conn)}).get_current_revision()
+
+
+def migrate(bind) -> None:
+    with bind.begin() as conn:
+        tables = inspect(conn).get_table_names(schema=_schema_for(conn))
+        cfg = alembic_config(conn)
+        if "users" in tables and "alembic_version" not in tables:
+            command.stamp(cfg, "0001")
+        command.upgrade(cfg, "head")
 
 
 def apply_rls(bind) -> None:
@@ -237,9 +271,16 @@ def scope_to_tenant(session: Session, tenant_id: int) -> None:
 def init_db() -> str:
     global RLS
     try:
-        create_schema(engine)
         if RLS:
+            current, needed = revision(engine), head()
+            if current != needed:
+                raise RuntimeError(
+                    f"The database schema is at revision {current or 'none'} and this code needs {needed}. "
+                    "Run `python -m src.db setup` with DATABASE_ADMIN_URL set to the owner's connection string.")
             verify_rls(engine)
+        else:
+            create_schema(engine)
+            migrate(engine)
         with SessionLocal() as session:
             ensure_tenant(session, config.DEFAULT_TENANT, config.DEFAULT_TENANT_NAME)
         return "primary"
@@ -252,7 +293,7 @@ def init_db() -> str:
         connect_args={"check_same_thread": False},
     ).execution_options(schema_translate_map={SCHEMA: None})
     SessionLocal.configure(bind=fallback)
-    Base.metadata.create_all(fallback)
+    migrate(fallback)
     with SessionLocal() as session:
         ensure_tenant(session, config.DEFAULT_TENANT, config.DEFAULT_TENANT_NAME)
     return "fallback"
@@ -305,6 +346,7 @@ def stats() -> dict:
 def setup(admin_url: str) -> str | None:
     admin = create_engine(normalised(admin_url), connect_args=_connect_args())
     create_schema(admin)
+    migrate(admin)
     apply_rls(admin)
     password = None
     with admin.begin() as conn:
