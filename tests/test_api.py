@@ -199,3 +199,21 @@ def test_reseed_rebuilds_the_live_assistant(client, account, monkeypatch):
     after = main.STATE["bots"][config.DEFAULT_TENANT]
     assert after is not before
     assert len(after.chunks) == body["chunks"]
+
+
+def test_daily_chat_quota(client, monkeypatch):
+    other = client.post(
+        "/api/auth/signup",
+        json={"name": "Quota", "email": f"{uuid.uuid4().hex[:12]}@example.com", "password": "correct-horse"},
+    ).json()
+    headers = {"Authorization": f"Bearer {other['token']}"}
+    monkeypatch.setattr(config, "CHAT_DAILY_LIMIT", 1)
+
+    def ask() -> int:
+        with client.stream("POST", "/api/chat", json={"question": "What does the RX-900 cost?"},
+                           headers=headers) as res:
+            res.read()
+            return res.status_code
+
+    assert ask() == 200
+    assert ask() == 429

@@ -5,18 +5,19 @@ import json
 import sys
 import time
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from api.deps import current_user, get_db
+from api.deps import current_user, get_db, rate_limit
 from api.routes_auth import router as auth_router
 from api.schemas import (
     ChatRequest,
@@ -168,6 +169,15 @@ def _history(convo: Conversation) -> list[tuple[str, str]]:
     return pairs[-config.HISTORY_TURNS:]
 
 
+def turns_today(db: Session, user: User) -> int:
+    return db.scalar(
+        select(func.count(Message.id)).join(Conversation).where(
+            Conversation.user_id == user.id,
+            Message.role == "assistant",
+            Message.created_at >= now() - timedelta(days=1),
+        )) or 0
+
+
 @app.post("/api/chat")
 async def chat(
     req: ChatRequest,
@@ -178,6 +188,11 @@ async def chat(
     question = req.question.strip()
     if not question:
         raise HTTPException(422, "Question is empty")
+    if user.email not in ADMINS:
+        rate_limit(f"chat:{user.id}", 6, 60)
+        if turns_today(db, user) >= config.CHAT_DAILY_LIMIT:
+            raise HTTPException(429, f"You've used today's {config.CHAT_DAILY_LIMIT} questions. "
+                                     "They free up again over the next 24 hours.")
 
     convo = _conversation(db, user, req.conversation_id)
     history = _history(convo)
