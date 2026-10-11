@@ -88,26 +88,34 @@ def wait_hint(message: str) -> float:
     return int(hours or 0) * 3600 + int(minutes or 0) * 60 + float(seconds)
 
 
+TRANSIENT = ("RateLimit", "Timeout", "Connection", "InternalServer")
+
+
+def retryable(text: str) -> bool:
+    return any(kind in text for kind in TRANSIENT)
+
+
 def patient(call, bot=None):
     for attempt in range(12):
         if bot is not None:
             bot.last_error = None
         try:
             result = call()
-            if bot is None or not (bot.last_error and "RateLimit" in bot.last_error):
+            if bot is None or not (bot.last_error and retryable(bot.last_error)):
                 return result
             message = bot.last_error
         except Exception as exc:
-            if "RateLimit" not in type(exc).__name__:
+            if not retryable(type(exc).__name__):
                 raise
-            message = str(exc)
+            message = f"{type(exc).__name__}: {exc}"
         wait = wait_hint(message) + 5 * attempt
         if "per day" in message and wait > 3 * 3600:
             raise SystemExit(f"The teacher's free daily token cap is used up; run again in {wait / 3600:.1f} h, "
                              "and it resumes where it stopped")
-        print(f"  rate limited, waiting {wait / 60:.1f} min", flush=True)
+        kind = next(k for k in TRANSIENT if k in message)
+        print(f"  {kind}, waiting {wait / 60:.1f} min", flush=True)
         time.sleep(wait + 2)
-    raise RuntimeError("Still rate limited after twelve attempts")
+    raise RuntimeError("Still failing after twelve attempts")
 
 
 def distill(bot, pause: float) -> None:
