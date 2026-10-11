@@ -53,14 +53,14 @@ def write_kb(folder: Path, docs: dict[str, str]) -> None:
             path.unlink()
 
 
-def organisation(slug: str, labels: dict[str, str] | None = None, model: bool = False):
+def organisation(slug: str, name: str, labels: dict[str, str] | None = None, model: bool = False):
     from src import config
     from src.ingest import build_index
     from src.rag import SupportAssistant
 
     config.SOURCE_LABELS.update(labels or {})
     build_index(slug)
-    return SupportAssistant(tenant=slug, fallbacks=model)
+    return SupportAssistant(tenant=slug, fallbacks=model, organisation=name)
 
 
 def best_similarity(bot, questions: list[str], batch: int = 256) -> list[float]:

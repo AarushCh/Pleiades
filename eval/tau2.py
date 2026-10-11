@@ -103,7 +103,7 @@ def main() -> None:
 
     isolate(DATA / "work", model=bool(args.answers))
     write_kb(DATA / "work" / "kb", documents())
-    bot = organisation("tau2_telecom", LABELS, model=bool(args.answers))
+    bot = organisation("tau2_telecom", "Telecom", LABELS, model=bool(args.answers))
     todo = cases(args.split)
     deep = max(KS)
     for variant in ("customer", "ticket"):

@@ -174,7 +174,8 @@ def assemble_sft(bot) -> None:
         if rec["outcome"] != "answered" or rec["attempts"] != 1 or len(docs) != len(rec["context"]):
             stats["dropped"] += 1
             continue
-        payload = {"context": format_context(docs, rec.get("facts", [])), "history": format_history([]), "question": rec["question"]}
+        payload = {"context": format_context(docs, rec.get("facts", [])), "history": format_history([]),
+                   "question": rec["question"], "organisation": bot.organisation}
         rows[split].append(sample(ANSWER_PROMPT.format_messages(**payload), rec["answer"]))
         stats["answers"] += 1
     for split, data in rows.items():

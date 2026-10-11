@@ -13,7 +13,7 @@ from src.ingest import get_vectorstore
 from src.llm import get_llm, get_llm_with_fallbacks
 
 SYSTEM_PROMPT = (
-    "You are the Nimbus Networks support assistant. Answer only from <context>.\n"
+    "You are the {organisation} support assistant. Answer only from <context>.\n"
     "If <context> does not answer the question, reply with exactly one sentence saying the "
     "knowledge base does not cover it, then offer to pass the customer to a human agent. "
     "Do not offer to answer from general knowledge and do not speculate. Never invent "
@@ -120,6 +120,7 @@ class SupportAssistant:
     top_k: int = config.TOP_K
     history: list[tuple[str, str]] = field(default_factory=list)
     fallbacks: bool = True
+    organisation: str = config.DEFAULT_TENANT_NAME
 
     def __post_init__(self) -> None:
         from rank_bm25 import BM25Okapi
@@ -248,6 +249,7 @@ class SupportAssistant:
             "context": format_context(r.docs, r.facts),
             "history": format_history(self.history if history is None else history),
             "question": question,
+            "organisation": self.organisation,
         }
 
     def respond(self, question: str, history: list[tuple[str, str]] | None = None) -> dict:

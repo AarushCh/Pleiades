@@ -153,6 +153,16 @@ def test_each_tenant_gets_its_own_vector_collection(tenants):
     assert "acme_isolation_test" in collection_for(tenants["away"])
 
 
+def test_each_organisation_is_named_in_its_own_prompt(tenants):
+    from api.main import assistant
+    from src.rag import ANSWER_PROMPT, Retrieval
+
+    payload = assistant(OTHER)._payload("Hello?", Retrieval([], [], "Hello?", False, []))
+    prompt = ANSWER_PROMPT.format(**payload)
+    assert "You are the Acme Isolation Test support assistant" in prompt
+    assert config.DEFAULT_TENANT_NAME not in prompt
+
+
 def test_a_tenant_slug_is_unique():
     with SessionLocal() as s:
         first = ensure_tenant(s, OTHER)

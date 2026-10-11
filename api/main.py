@@ -124,8 +124,14 @@ def bot(tenant: str | None = None) -> SupportAssistant:
         raise HTTPException(503, "Assistant is still starting")
     slug = (tenant or config.DEFAULT_TENANT).strip().lower()
     if slug not in bots:
-        bots[slug] = SupportAssistant(tenant=slug)
+        bots[slug] = assistant(slug)
     return bots[slug]
+
+
+def assistant(slug: str) -> SupportAssistant:
+    with SessionLocal() as session:
+        name = session.scalar(select(Tenant.name).where(Tenant.slug == slug))
+    return SupportAssistant(tenant=slug, organisation=name or config.DEFAULT_TENANT_NAME)
 
 
 def tenant_slug(db: Session, user: User) -> str:
@@ -486,7 +492,7 @@ async def reseed(user: User = Depends(admin_user), db: Session = Depends(get_db)
     synced = seed_documents(db, user.tenant_id)
     slug = tenant_slug(db, user)
     await asyncio.to_thread(build_index, slug)
-    fresh = await asyncio.to_thread(SupportAssistant, slug)
+    fresh = await asyncio.to_thread(assistant, slug)
     STATE["bots"][slug] = fresh
     return {"synced": synced, "chunks": len(fresh.chunks)}
 

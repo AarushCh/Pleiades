@@ -54,7 +54,8 @@ def main() -> None:
     isolate(DATA / "work")
     docs, where = guidelines()
     write_kb(DATA / "work" / "kb", docs)
-    bot = organisation("abcd", {name: f"AcmeBrands guidelines: {name[:-3].replace('_', ' ').title()}" for name in docs})
+    labels = {name: f"AcmeBrands guidelines: {name[:-3].replace('_', ' ').title()}" for name in docs}
+    bot = organisation("abcd", "AcmeBrands", labels)
     deep = max(KS)
     rows = []
     for turns in (1, 2):
