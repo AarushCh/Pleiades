@@ -61,6 +61,7 @@ export default function Page() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [theme, setTheme] = useState(null);
+  const [menu, setMenu] = useState(false);
 
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
@@ -170,6 +171,7 @@ export default function Page() {
 
   const openConvo = async (id) => {
     abortRef.current?.abort();
+    setMenu(false);
     let rows;
     try {
       rows = await getConversation(id);
@@ -208,6 +210,7 @@ export default function Page() {
 
   const newConvo = () => {
     abortRef.current?.abort();
+    setMenu(false);
     setConvoId(null);
     setMessages([]);
   };
@@ -225,14 +228,17 @@ export default function Page() {
   if (!session) return <AuthGate onAuthenticated={setSession} />;
 
   return (
-    <div className="shell">
-      <aside className="glass sidebar">
+    <div className={`shell${menu ? " shell--menu" : ""}`}>
+      <aside className="glass sidebar" id="sidebar">
         <div className="brand">
           <div className="brand__mark">P</div>
           <div>
             <h1>Pleiades</h1>
             <p>Nimbus Networks workspace</p>
           </div>
+          <button type="button" className="tab menu-btn" onClick={() => setMenu(false)}>
+            Close
+          </button>
         </div>
 
         <section>
@@ -313,6 +319,10 @@ export default function Page() {
 
       <main className="glass main">
         <div className="topbar">
+          <button type="button" className="tab menu-btn" onClick={() => setMenu(true)}
+            aria-controls="sidebar" aria-expanded={menu}>
+            Menu
+          </button>
           <div>
             <h2>Support conversation</h2>
             <p>Grounded in {health?.documents?.length ?? "the"} internal documents, with citations</p>
