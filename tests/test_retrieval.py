@@ -40,6 +40,7 @@ def test_a_follow_up_is_searched_with_the_previous_exchange(assistant):
     history = [("My router's internet light is solid amber", "That usually means the login details are wrong.")]
     r = assistant.retrieve("What do I do about it?", history, expand=False)
     assert "LED status indicators" in r.docs[0].metadata["section"]
+    assert len(assistant.retrieve("What do I do about it?", history, top_k=1, expand=False).docs) == 1
 
 
 @pytest.mark.llm

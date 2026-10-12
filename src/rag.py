@@ -233,7 +233,7 @@ class SupportAssistant:
             for h in keyword:
                 fused[h] = fused.get(h, 0.0) + config.KEYWORD_BONUS
 
-        leaders = context[:1] + primary[:1] if context else primary[:min(config.ANCHORS, top_k)]
+        leaders = (context[:1] + primary[:1])[:top_k] if context else primary[:min(config.ANCHORS, top_k)]
         anchors = [] if config.FUSION == "rrf" else [
             doc.metadata["hash"] for doc, sim in leaders if sim >= config.MIN_RELEVANCE
         ]

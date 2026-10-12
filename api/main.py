@@ -64,7 +64,7 @@ async def lifespan(_: FastAPI):
     if not config.CHROMA_DIR.exists():
         raise RuntimeError("No vector index. Run: python -m src.ingest")
     STATE["bots"] = {}
-    home = STATE["bots"][config.DEFAULT_TENANT] = await asyncio.to_thread(SupportAssistant)
+    home = STATE["bots"][config.DEFAULT_TENANT] = await asyncio.to_thread(assistant, config.DEFAULT_TENANT)
     STATE["answering"], STATE["llm_failures"] = await asyncio.to_thread(
         first_answering, home.llm, home.models)
     yield
