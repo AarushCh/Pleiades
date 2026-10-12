@@ -26,7 +26,7 @@ The demo tenant is **Nimbus Networks**, a fictional ISP.
 | `.\run.ps1 dev` | API with reload on `:8000`, Next dev server on `:5173` |
 | `.\run.ps1 demo` | Scripted five-question walkthrough in the terminal |
 | `.\run.ps1 cli` | Interactive terminal client |
-| `.\run.ps1 test` | pytest suite (104 tests) |
+| `.\run.ps1 test` | pytest suite (111 tests) |
 | `.\run.ps1 eval` | Retrieval recall benchmark |
 | `.\run.ps1 backend` | Reports which model is live and makes a test call |
 
@@ -173,7 +173,11 @@ it invite-only with `POST /api/admin/join-code`, which returns a code new accoun
 `join_code` (a fresh call replaces it, and `DELETE` opens sign-up again).
 
 Each organisation gets its own Chroma collection rather than a share of one collection behind a
-filter. A bug in retrieval can't reach documents it was never indexed next to.
+filter. A bug in retrieval can't reach documents it was never indexed next to. The answer prompt
+names the organisation the assistant is serving, taken from its row in `tenants`; it used to say
+Nimbus Networks to everyone, which nudged the model into refusing questions about any other
+company's documents. Indexing writes in batches of 5,000 chunks, below Chroma's limit, so a
+knowledge base the size of TechQA's (36,670 chunks) indexes instead of failing.
 
 On Postgres the database enforces the same boundary with row-level security (`DB_RLS=1`). The
 tenant is applied at the start of every transaction, so it survives commits and works behind a
@@ -228,9 +232,11 @@ question's top hits fixes that, so anchored fusion stays the default. Fifteen qu
 small set, one question moves recall by 6.7 points, and the comparison will be rerun on the
 larger eval set.
 
-Follow-ups are condensed against chat history, but the **original** question is always
-retrieved alongside the condensed one. Condensing alone silently dropped "4 days" from *"my
-router died 4 days after it arrived"*, which flipped the DOA answer from correct to wrong.
+Short or referential follow-ups are condensed against chat history by the model, but the
+**original** question is always retrieved alongside the condensed one. Condensing alone silently
+dropped "4 days" from *"my router died 4 days after it arrived"*, which flipped the DOA answer
+from correct to wrong. Other follow-ups, and all of them without a model, are searched with the
+last exchange as well (see [Follow-up questions](#follow-up-questions)).
 
 ### Measured
 
@@ -292,6 +298,56 @@ place rises to 39.9% on doc2dial's test split and falls from 9 to 7 of 15 on Nim
 tuned encoder's own top hit is better. The six passages the model reads are the same either way, so
 production keeps the anchors first.
 
+### More organisations, written by other people
+
+Each script below downloads a pinned copy, turns it into one organisation's knowledge base and
+scores production retrieval (hybrid, no model) on questions the dataset's authors labelled.
+
+| Benchmark | Knowledge base | Questions | Found @1 | @6 | @10 |
+|---|---|---|---|---|---|
+| `eval/repliqa.py`: RepLiQA, the right document | 300 made-up company policies, incident reports, small-business and security news (2,991 chunks) | 1,202 answerable | 79.6% | 96.3% | 97.2% |
+| `eval/abcd.py`: ABCD, the agent guideline for the customer's request, from their first message | AcmeBrands' 55 agent procedures (118 chunks) | 1,004 test conversations | 39.7% | 73.3% | 79.3% |
+| the same, from the first two messages | | | 46.4% | 81.5% | 86.4% |
+| `eval/tau2.py`: τ²-bench telecom, the troubleshooting path for the complaint | Tech support manual, workflow, agent policy and plans (90 chunks) | 114 base tasks | 100% | 100% | 100% |
+| the same, sections for every fix the task needs, from the customer's words | | | 0.0% | 19.4% | 36.0% |
+| the same, from the agent's ticket | | | 3.4% | 50.0% | 62.0% |
+| `eval/techqa.py`: TechQA, the technote that answers it | 6,974 IBM technotes, every question's candidates pooled (36,670 chunks) | 160 answerable dev questions | 41.2% | 70.6% | 74.4% |
+
+RepLiQA's documents are invented, so no model has seen them; retrieval finds the right one 96% of
+the time in the top six. ABCD measures routing: real customer openers like "I need to return an
+item" to the right one of 55 procedures. A second message helps by eight points, which is why the
+history matters (see follow-ups below). τ²-bench shows the limit of one-shot retrieval on
+diagnosis: the right troubleshooting path is found every time, but the actual fixes (airplane
+mode, APN reset, roaming) depend on the phone's hidden state, so they come up only when someone
+describes the symptoms in detail, as the agent's ticket does. Walking a customer through those
+checks is a multi-turn job, the agentic support item on the roadmap. TechQA is the hardest: real
+IBM forum questions, often a pasted error log, against thousands of near-identical product
+technotes; the answering one is in the top six seven times in ten.
+
+### Follow-up questions
+
+Customers ask "what about the other one?" and "do I need to bring anything?". `python
+eval/doc2dial.py --follow-ups` takes MultiDoc2Dial (IBM, Apache-2.0), which reuses doc2dial's 488
+documents, and asks every follow-up in a split with no model; the target is the passage the
+agent's reply was written from. On the test split's 3,675 follow-ups:
+
+| Searched with | Passage @1 | @3 | @6 | @10 | Document @1 | @3 | @6 | @10 |
+|---|---|---|---|---|---|---|---|---|
+| The follow-up alone | 15.6% | 29.5% | 38.2% | 42.2% | 24.0% | 38.2% | 46.0% | 50.3% |
+| Plus the previous question | 20.4% | 38.9% | 51.5% | 57.6% | 37.3% | 58.4% | 68.0% | 72.8% |
+| Plus the last exchange | 23.9% | 42.8% | 55.8% | 62.9% | 46.7% | 67.6% | 77.8% | 82.5% |
+| **Pleiades: both searches** | **24.0%** | **47.1%** | **60.5%** | **68.6%** | **47.1%** | **69.1%** | **79.0%** | **84.1%** |
+
+Searching with the follow-up alone, which is what Pleiades did without a model, misses most of
+them. Adding the last question and the start of the last answer fixes much of that, and keeping
+both searches beats either one, so retrieval runs the follow-up on its own and with the last
+exchange, puts the second search's top hit first and the follow-up's own top hit second, and
+fills the rest by score. The order was chosen on the validation split (3,767 follow-ups): with the
+follow-up's own hit first, the right passage came first 15.5% of the time; with the exchange's hit
+first, 20.8%, and nothing from @3 on changes. The test split above confirms it. It costs one more
+vector search and no model call, and a conversation's first question is untouched. With a model
+answering, short or referential follow-ups ("what about it?") are rewritten by the model instead.
+
 ## Checking the answer before anyone sees it
 
 A model that has the right passage can still write the wrong number. A refund window of 14 days
@@ -314,13 +370,38 @@ The `done` event carries the outcome, the figures that failed and how many draft
 Arithmetic is done in code, not by the model. When a customer gives an outage length and the
 retrieved documents include an uptime-to-credit table, `src/sla.py` reads that table, works out
 the month's uptime over 30 days and picks the row. The result goes into the context marked as
-an exact calculation, so the model quotes it and the figure check accepts it. What the check
-still doesn't catch: figures written as words ("seven days").
+an exact calculation, so the model quotes it and the figure check accepts it. A number the
+documents spell out supports the same number in digits ("seven days", "twenty-three", "third",
+"1.5 million", "2 lakh"), and times are compared on the 24-hour clock, so "10 pm" matches "22:00".
+Answers stay strict: a number the model spells out isn't checked, but it never fails a check either.
+
+### Measured on RAGTruth
+
+`python eval/ragtruth.py` scores the figure check on RAGTruth (Niu et al., ACL 2024, MIT): 2,700
+test answers written by six models for question answering, summarisation and data-to-text, with
+every hallucinated span marked by annotators. An answer counts as caught when a figure the check
+rejects lies inside a span marked as hallucinated.
+
+| Task | Answers | With a hallucinated figure | Caught | Clean answers wrongly flagged | Flags that were right |
+|---|---|---|---|---|---|
+| Question answering | 900 | 58 | 50.0% | 0.9% (was 1.2%) | 82.1% (was 78.0%) |
+| Summaries | 900 | 47 | 53.2% | 11.9% (was 14.4%) | 35.2% (was 31.5%) |
+| Data to text | 900 | 143 | 44.1% (was 48.3%) | 2.8% (was 19.0%) | 90.5% (was 67.7%) |
+| All | 2,700 | 248 | 47.2% (was 49.6%) | 5.6% (was 9.7%) | 62.2% (was 54.8%) |
+
+The "was" figures are the check before it read number words and both clocks. The wrongly flagged
+data-to-text answers were nearly all opening hours ("2:00 pm" against "14:00"), which is exactly
+what a support bot quoting a help centre's hours would have hit: Nimbus's own help centre says
+"08:00 to 22:00 IST", and "8 am to 10 pm" used to fail. About half the hallucinated figures are
+caught; the rest are numbers that do appear in the source but in the wrong place, which a string
+check can't see. Summaries still trip it 11.9% of the time: models announcing their own word count
+("in 84 words or less"), and figures added from outside the article, some plainly wrong but left
+unmarked (one summary launches Hillary Clinton's 2020 campaign in a 2015 article).
 
 ### Why off-topic questions aren't refused earlier
 
 Refusing before the draft would save the answer call on questions the documents can't answer.
-Two ways of doing it were measured, and neither was safe enough to ship.
+Three ways of doing it were measured, and none was safe enough to ship.
 
 - **A similarity floor.** With Pleiades-Embed, the closest passage for 231 in-domain questions
   (both benchmarks plus the teacher-written customer questions) scores as low as 0.368, and
@@ -332,10 +413,26 @@ Two ways of doing it were measured, and neither was safe enough to ship.
   qwen also declined 3 of the first 29 in-domain ones, including "no net since morning", and
   gpt-oss-120b, with a stricter instruction, still declined 2 of 48: "fiber cut in my area" and
   "can i get a refund if i change my mind?".
+- **A classifier on the question's embedding.** `python eval/abstain.py` trains a logistic
+  regression (numpy, no model call) on 9,360 support questions (Bitext Telco and customer
+  service, ABCD openers) against 8,100 others (CLINC150's out-of-scope and non-banking intents,
+  MASSIVE's assistant commands), sets the threshold to keep 99.8% of held-out support questions,
+  and never refuses when a passage scores 0.5 or more. It keeps every Nimbus benchmark question,
+  99.6 to 99.8% of held-out support questions and 98.8% of Banking77's banking ones, refuses
+  both must-refuse questions, and catches 57% of CLINC150's out-of-scope questions and 79% of
+  MASSIVE's. But it turns away 5 of 30 short and code-mixed support questions: "slow", "bill",
+  "speed test", "plan kaise change karu" and "నా ఇంటర్నెట్ పని చేయడం లేదు" (Telugu for "my
+  internet isn't working"). Its training data has no terse or code-mixed support questions, and
+  the English encoder reads other scripts poorly, which is also why it refuses 97 to 99.8% of
+  off-topic Telugu, Kannada and Malayalam but only 8% of Hindi. Set to keep 99.5% instead, it
+  also refused "no net since morning".
 
 Telling someone whose internet is down that support can't help costs far more than the 2,000 to
-3,000 tokens an off-topic question uses. So the answer step stays the judge. It sees the
-retrieved passages before deciding, and qwen refuses both must-refuse questions in the benchmark.
+3,000 tokens an off-topic question uses, and one-word questions and Hinglish are how many
+customers actually type. So the answer step stays the judge. It sees the retrieved passages
+before deciding, and qwen refuses both must-refuse questions in the benchmark. The classifier is
+worth revisiting with a multilingual encoder and real short, code-mixed support questions to
+train on.
 
 ## Our own models
 
@@ -511,7 +608,7 @@ src/cli.py         terminal client
 src/app.py         Streamlit UI (alternative to the Next.js one)
 api/               FastAPI service, SSE streaming, session store
 frontend/          Next.js app router, glass design system
-tests/             104 tests, LLM-dependent ones skip unless a backend answers
+tests/             111 tests, LLM-dependent ones skip unless a backend answers
 training/          training data, the embedder and answering-model fine-tunes, the project assistant
 eval/              retrieval and answer benchmarks, doc2dial recall, Bitext intent coverage
 ```
@@ -523,11 +620,23 @@ eval/              retrieval and answer benchmarks, doc2dial recall, Bitext inte
 | `data/*.md`, the Nimbus Networks documents | Written for this project; Nimbus is fictional | The demo organisation's knowledge base | Yes |
 | `eval/dataset.json`, `eval/answers.json` | Written for this project | Retrieval and answer benchmarks | Yes |
 | [doc2dial](https://doc2dial.github.io) (IBM, Feng et al., EMNLP 2020) | CC BY 3.0 | Retrieval benchmark on outside documents (`eval/doc2dial.py`) | No, downloaded when run |
-| [Bitext Telco](https://huggingface.co/datasets/bitext/Bitext-telco-llm-chatbot-training-dataset) | CDLA-Sharing-1.0 | Coverage audit of the knowledge base (`eval/coverage.py`) | No, downloaded when run |
+| [MultiDoc2Dial](https://doc2dial.github.io/multidoc2dial/) (IBM, Feng et al., EMNLP 2021) | Apache-2.0 | Follow-up questions (`eval/doc2dial.py --follow-ups`) | No, downloaded when run |
+| [Bitext Telco](https://huggingface.co/datasets/bitext/Bitext-telco-llm-chatbot-training-dataset) and [Customer Support](https://huggingface.co/datasets/bitext/Bitext-customer-support-llm-chatbot-training-dataset) | CDLA-Sharing-1.0 | Coverage audits (`eval/coverage.py --set telco/general`), in-scope examples for the scope classifier | No, downloaded when run |
+| [τ²-bench telecom](https://github.com/sierra-research/tau2-bench) (Sierra, Barres et al., 2025) | MIT | A second telecom organisation and 114 graded tasks (`eval/tau2.py`) | No, downloaded when run |
+| [ABCD](https://github.com/asappresearch/abcd) (ASAPP, Chen et al., NAACL 2021) | MIT | AcmeBrands agent guidelines and 1,004 test conversations (`eval/abcd.py`), in-scope examples | No, downloaded when run |
+| [RepLiQA](https://huggingface.co/datasets/ServiceNow/repliqa) (ServiceNow, Monteiro et al., NeurIPS 2024) | CC BY 4.0 | Unseen documents with unanswerable questions (`eval/repliqa.py`) | No, downloaded when run |
+| [TechQA](https://huggingface.co/datasets/PrimeQA/TechQA) (IBM, Castelli et al., ACL 2020) | CDLA-Permissive-1.0 (per the archive's own licence file) | Real technical-support questions over IBM technotes (`eval/techqa.py`) | No, downloaded when run |
+| [RAGTruth](https://github.com/ParticleMedia/RAGTruth) (Niu et al., ACL 2024) | MIT | Scoring the figure check (`eval/ragtruth.py`) | No, downloaded when run |
+| [CLINC150](https://github.com/clinc/oos-eval) (Larson et al., EMNLP 2019) | CC BY 3.0 | Off-topic examples for the scope classifier (`eval/abstain.py`) | No, downloaded when run |
+| [MASSIVE](https://github.com/alexa/massive) (Amazon, FitzGerald et al., ACL 2023) | CC BY 4.0 | Off-topic examples, and off-topic questions in Hindi, Bengali, Tamil, Telugu, Kannada, Malayalam and Urdu | No, downloaded when run |
+| [Banking77](https://github.com/PolyAI-LDN/task-specific-datasets) (PolyAI, Casanueva et al., 2020) | CC BY 4.0 | Another industry's support questions, which the scope classifier must keep | No, downloaded when run |
+| [TRAI QoS Regulations 2024](https://trai.gov.in/node/13235) (No. 06 of 2024) | Government of India; reproduction needs TRAI's permission, so it is cited, not copied | The help centre's regulator answer states its benchmarks in our own words | Cited only |
 | Training pairs and distilled answers | Generated from the Nimbus documents by the teacher model | Fine-tuning Pleiades-Embed and Pleiades-Chat | No, `training/build/` |
 
-Nothing downloaded is committed or redistributed; the two evaluation scripts fetch pinned copies
-into the git-ignored `eval/external/`.
+Nothing downloaded is committed or redistributed; the evaluation scripts fetch copies pinned to a
+commit or revision into the git-ignored `eval/external/`. Each licence was checked against the
+source's own licence file or dataset card on 2026-10-12; TechQA's Hugging Face card says
+Apache-2.0, but the archive's README and licence file say CDLA-Permissive-1.0, which is what applies.
 
 ## Adding your own knowledge base
 
@@ -545,6 +654,38 @@ answered "how do I talk to a person" (78% of those questions landed on old ticke
 the time, from an ISP that sells no phones. `data/help_centre.md` was written from that list, in
 the customers' own words, with every figure agreeing with the other documents; those intents now
 reach the right section 65-100% of the time, and the 15-question set above is unchanged.
+
+`--set general` runs the same audit on Bitext's 27 cross-industry customer-service intents. It found
+the next gaps: "I forgot my password" retrieved the router's factory reset 85% of the time (the
+documents never mention the account login), refund questions landed on payment methods, "track my
+refund" on old tickets, "I want to lodge a claim" on the warranty policy, and nothing covered
+registration problems or feedback. The help centre now answers each, again only with figures the
+other documents already state, and the audit shows where they land (60 phrasings per intent):
+
+| Intent | Before | After |
+|---|---|---|
+| recover_password | Router manual, factory reset (85%) | Account password reset (70%) |
+| registration_problems | Old tickets (68%) | Sign-up problems (93%) |
+| review | Talk to a person (63%) | Feedback (92%) |
+| edit_account | Billing cycle date (45%) | Account password and profile (82%) |
+| check_refund_policy | Warranty escalation (50%) | Refunds (60%) |
+| complaint | Warranty policy (47%) | Complaints (52%) |
+| get_refund / track_refund | Payment methods (25%) / old tickets (30%) | Refunds (42% / 37%) |
+
+The first draft of the new answers created a new problem the audit caught at once: a section titled
+"How do I update my account details?" pulled "I want to change my plan" away from the plan-change
+answer (67% to 40%), and generic profile wording drew invoice questions too. Profile edits now sit
+inside the password answer and the plan answer uses the customers' own words ("modify my plan or
+contract"), so change_plan reaches it 78% of the time and every telco intent keeps its section. The
+golden set moved from 13 to 14 of 15 vector-only, but only because the reworded complaint answer
+left the sixth place to the RMA escalation clause, so treat that one as noise.
+
+The help centre's regulator answer states TRAI's broadband benchmarks (QoS Regulations 2024,
+No. 06 of 2024): billing complaints resolved within four weeks, adjustments within a week of
+resolution, deposits refunded within 45 days with interest on delays. One rule it deliberately
+leaves out: closure within seven working days of the request with no billing after that, which
+sits awkwardly with the billing FAQ's "cancellation takes effect at the end of the current billing
+period" and is a policy decision for the document owner, not a retrieval fix.
 
 A new or changed document reaches a running deployment through `python -m src.db setup` or the
 admin console's index rebuild, which copy `data/` into the organisation's documents.
