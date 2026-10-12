@@ -5,7 +5,7 @@ import json
 import re
 import tomllib
 
-from external import EXTERNAL, KS, fetch, isolate, organisation, pct, table, write_kb
+from external import EXTERNAL, KS, answered, fetch, isolate, organisation, pct, table, wilson, write_kb
 
 DATA = EXTERNAL / "tau2"
 BASE = ("https://raw.githubusercontent.com/sierra-research/tau2-bench/"
@@ -83,15 +83,17 @@ def score(docs: list, case: dict) -> dict[str, list[float]]:
 
 def answers(bot, todo: list[dict]) -> None:
     rows, said, needed = [], 0, 0
+    replies = answered(bot, [c["customer"] for c in todo], DATA / "answers.jsonl")
     for case in todo:
-        reply = bot.answer(case["customer"], remember=False)
+        reply = replies[case["customer"]]
         text = reply["answer"].lower()
         hit = [f for f in case["fixes"] if any(w in text for w in FIXES[f][1])
                or (f == "transfer_to_human_agents" and reply["outcome"] == "escalated")]
         said, needed = said + len(hit), needed + len(case["fixes"])
         rows.append([case["id"][:60], reply["outcome"], f"{len(hit)}/{len(case['fixes'])}"])
     table(["task", "outcome", "fixes mentioned"], rows)
-    print(f"\nFixes the answer tells the customer to try: {pct(said, needed)}% of {needed}")
+    print(f"\nFixes the answer tells the customer to try: {pct(said, needed)}% of {needed} "
+          f"(95% interval {wilson(said, needed)}), answers from {bot.backend_name}")
 
 
 def main() -> None:
@@ -103,7 +105,7 @@ def main() -> None:
 
     isolate(DATA / "work", model=bool(args.answers))
     write_kb(DATA / "work" / "kb", documents())
-    bot = organisation("tau2_telecom", "Telecom", LABELS, model=bool(args.answers))
+    bot = organisation("tau2_telecom", "Telecom", LABELS)
     todo = cases(args.split)
     deep = max(KS)
     for variant in ("customer", "ticket"):

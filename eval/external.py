@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
@@ -53,14 +54,41 @@ def write_kb(folder: Path, docs: dict[str, str]) -> None:
             path.unlink()
 
 
-def organisation(slug: str, name: str, labels: dict[str, str] | None = None, model: bool = False):
+def organisation(slug: str, name: str, labels: dict[str, str] | None = None):
     from src import config
     from src.ingest import build_index
     from src.rag import SupportAssistant
 
     config.SOURCE_LABELS.update(labels or {})
     build_index(slug)
-    return SupportAssistant(tenant=slug, fallbacks=model, organisation=name)
+    return SupportAssistant(tenant=slug, fallbacks=False, organisation=name)
+
+
+def answered(bot, questions: list[str], path: Path) -> dict[str, dict]:
+    sys.path.insert(0, str(ROOT / "training"))
+    from product_data import patient
+
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()] if path.exists() else []
+    done = {r["question"]: r for r in rows if r["model"] == bot.backend_name}
+    todo = [q for q in dict.fromkeys(questions) if q not in done]
+    print(f"Answering {len(todo)} questions with {bot.backend_name} ({len(done)} already in {path.name})", flush=True)
+    with path.open("a", encoding="utf-8") as f:
+        for i, question in enumerate(todo, 1):
+            reply = patient(lambda q=question: bot.answer(q, remember=False), bot)
+            done[question] = {"model": bot.backend_name, "question": question, "outcome": reply["outcome"],
+                              "answer": reply["answer"], "expansions": reply["expansions"]}
+            f.write(json.dumps(done[question], ensure_ascii=False) + "\n")
+            f.flush()
+            print(f"  [{i}/{len(todo)}] {reply['outcome']}", flush=True)
+    return done
+
+
+def wilson(hits: int, total: int, z: float = 1.96) -> str:
+    if not total:
+        return "-"
+    p, d = hits / total, 1 + z * z / total
+    centre, half = (p + z * z / (2 * total)) / d, z * (p * (1 - p) / total + z * z / (4 * total * total)) ** 0.5 / d
+    return f"{100 * (centre - half):.0f}-{100 * (centre + half):.0f}"
 
 
 def table(header: list[str], rows: list[list]) -> None:

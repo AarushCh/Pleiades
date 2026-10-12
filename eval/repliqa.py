@@ -4,7 +4,7 @@ import argparse
 import random
 import re
 
-from external import EXTERNAL, KS, fetch, isolate, organisation, pct, table, write_kb
+from external import EXTERNAL, KS, answered, fetch, isolate, organisation, pct, table, wilson, write_kb
 
 DATA = EXTERNAL / "repliqa"
 URL = ("https://huggingface.co/datasets/ServiceNow/repliqa/resolve/bc880adc948fd3a70d5f8b2b3a1d1ee90d820dbd/"
@@ -50,7 +50,7 @@ def main() -> None:
     isolate(DATA / "work", model=bool(args.answers))
     kb, cases = load(TOPICS, args.docs, args.seed)
     write_kb(DATA / "work" / "kb", kb)
-    bot = organisation("repliqa", "Northwind", model=bool(args.answers))
+    bot = organisation("repliqa", "Northwind")
     answerable = [c for c in cases if c["answerable"]]
     deep, hits = max(KS), [0] * len(KS)
     for case in answerable:
@@ -64,11 +64,14 @@ def main() -> None:
     if not args.answers:
         return
 
-    sample = random.Random(args.seed).sample(cases, min(args.answers, len(cases)))
+    rng, unique = random.Random(args.seed), list({c["question"]: c for c in cases}.values())
+    sample = [c for want in (False, True) for c in rng.sample(
+        [c for c in unique if c["answerable"] == want], args.answers // 2 if not want else args.answers - args.answers // 2)]
+    replies = answered(bot, [c["question"] for c in sample], DATA / "answers.jsonl")
     tally = {"answered right": 0, "answered wrong": 0, "declined": 0,
              "declined right": 0, "made something up": 0, "unanswerable": 0}
     for case in sample:
-        reply = bot.answer(case["question"], remember=False)
+        reply = replies[case["question"]]
         declined = reply["outcome"] == "escalated" or bool(DECLINED.search(reply["answer"]))
         if case["answerable"]:
             key = "declined" if declined else "answered right" if correct(reply["answer"], case["answer"]) \
@@ -77,14 +80,15 @@ def main() -> None:
         else:
             tally["unanswerable"] += 1
             tally["declined right" if declined else "made something up"] += 1
-    n_ans = len(sample) - tally["unanswerable"]
+    n_ans, n_un = len(sample) - tally["unanswerable"], tally["unanswerable"]
     print(f"\nAnswers from {bot.backend_name} on {len(sample)} questions\n")
-    table(["outcome", "share"],
-          [["answerable: answered correctly", f"{pct(tally['answered right'], n_ans)}%"],
-           ["answerable: answered wrongly", f"{pct(tally['answered wrong'], n_ans)}%"],
-           ["answerable: declined", f"{pct(tally['declined'], n_ans)}%"],
-           ["unanswerable: declined", f"{pct(tally['declined right'], tally['unanswerable'])}%"],
-           ["unanswerable: answered anyway", f"{pct(tally['made something up'], tally['unanswerable'])}%"]])
+    table(["outcome", "share (%)", "95% interval"],
+          [[name, pct(tally[key], n), wilson(tally[key], n)] for name, key, n in (
+              ("answerable: answered correctly", "answered right", n_ans),
+              ("answerable: answered wrongly", "answered wrong", n_ans),
+              ("answerable: declined", "declined", n_ans),
+              ("unanswerable: declined", "declined right", n_un),
+              ("unanswerable: answered anyway", "made something up", n_un))])
 
 
 if __name__ == "__main__":
