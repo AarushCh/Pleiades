@@ -32,9 +32,12 @@ The first invoice includes: (a) pro-rated charges from activation date to the en
 (b) the full next month in advance, and (c) any one-time installation fee. This is normal.
 
 ## How do I cancel my subscription?
-Account → Plan → Cancel Subscription, or contact support. Cancellation takes effect at the end of
-the current billing period. We do not pro-rate refunds for partial months on monthly plans.
-Annual plans are refunded pro-rata minus a 10% administrative charge.
+To cancel, end or terminate your plan, contract or subscription, go to Account → Plan → Cancel
+Subscription, or contact support. We close the connection within 7 working days of your request
+and nothing is billed after it closes. Closure is never held back for unpaid
+dues; they go on the final invoice. Monthly plans are billed in advance, so the unused days of the
+last month are refunded pro-rata. Annual plans are refunded pro-rata minus a 10% administrative
+charge. Refunds reach the original payment method within 45 days of closure.
 
 ## Do you offer refunds for downtime?
 Yes. If measured uptime in a calendar month falls below the SLA for your plan, an automatic

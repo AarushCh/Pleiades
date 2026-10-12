@@ -31,9 +31,9 @@ It depends on what the refund is for:
 - An advance paid for an address we cannot serve is refunded in full within 5 business days.
 - Purchased hardware returned within 30 days is refunded to the original payment method within 7-10
   business days of reaching our warehouse.
-- Cancelling an annual plan refunds the unused months pro-rata minus a 10% administrative charge;
-  monthly plans are not refunded for partial months.
-To track a refund, quote your ticket number in this chat or to support.
+- Cancelling refunds the time already paid for after the connection closes, pro-rata (annual plans
+  minus a 10% administrative charge), within 45 days of closure.
+To track or check the status of a refund, quote your ticket number in this chat or to support.
 
 ## Where can I see or download my invoices?
 Account → Billing → Invoices lists every invoice with its PDF. Invoices are generated on the 1st of
@@ -84,9 +84,9 @@ swaps it at no charge. Annual plans can upgrade at any time and downgrade only a
 
 ## Is there a cancellation fee?
 Monthly plans have no cancellation fee, early exit fee, withdrawal fee or early termination charge
-or penalty, because there is
-no contract lock-in: cancellation takes effect at the end of the current billing period, and partial
-months are not refunded. Annual plans are refunded pro-rata minus a 10% administrative charge. A
+or penalty, because there is no contract lock-in: we close the connection within 7 working days of
+your request and refund the days you have already paid for after it closes. Annual plans are
+refunded pro-rata minus a 10% administrative charge. A
 leased router must be returned within 21 days of cancellation, or its price is charged (₹3,500 for
 the RX-500, ₹6,900 for the RX-900).
 
@@ -118,8 +118,9 @@ Nimbus follows the Telecom Regulatory Authority of India (TRAI) Standards of Qua
 Access (Wireline and Wireless) and Broadband (Wireline and Wireless) Service Regulations, 2024
 (No. 06 of 2024), in force since 1 October 2024. For fixed broadband they require providers to
 resolve billing and charging complaints within four weeks, apply any resulting adjustment to the
-customer's account within one week of resolving it, and refund deposits within 45 days of closing
-or not providing a service, with interest at 10% a year on any delay. Our own commitments are
+customer's account within one week of resolving it, close a service within seven working days of
+the request, and refund deposits within 45 days of closing or not providing a service, with
+interest at 10% a year on any delay. Our own commitments are
 faster: an unresolved complaint goes to the Grievance Officer after 7 days, a disputed charge gets
 a decision within 7 working days, and an advance for an address we cannot serve is refunded within
 5 business days.

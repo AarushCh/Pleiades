@@ -682,10 +682,19 @@ left the sixth place to the RMA escalation clause, so treat that one as noise.
 
 The help centre's regulator answer states TRAI's broadband benchmarks (QoS Regulations 2024,
 No. 06 of 2024): billing complaints resolved within four weeks, adjustments within a week of
-resolution, deposits refunded within 45 days with interest on delays. One rule it deliberately
-leaves out: closure within seven working days of the request with no billing after that, which
-sits awkwardly with the billing FAQ's "cancellation takes effect at the end of the current billing
-period" and is a policy decision for the document owner, not a retrieval fix.
+resolution, a service closed within seven working days of the request, deposits refunded within 45
+days with interest on delays. Nimbus's cancellation policy used to run to the end of the billing
+period, which broke the closure rule (no billing beyond seven working days of the request,
+regulation 7.1.6). It now closes the connection within 7 working days, never holds closure back
+for unpaid dues, and refunds the time already paid for after closure within 45 days, the deadline
+regulation 7.1.7 sets for any dues owed after closure. (ISPs with at most 10,000 subscribers are
+exempt; Nimbus follows the rules anyway.) The audits caught two side effects of the first wording:
+the regulator answer, carrying the full closure rule, pulled "my replacement has not arrived after
+three weeks" away from the escalation clause and out of the golden set's top six, and the longer
+cancellation answer lost "cancel my plan" queries to the fee answer. The regulator answer now
+states the rule in one clause and the cancellation answer opens with the customers' own words
+("cancel, end or terminate your plan, contract or subscription"): cancel_plan reaches it 67% of
+the time (58% before the change), and the golden set is unchanged at 14 of 15.
 
 A new or changed document reaches a running deployment through `python -m src.db setup` or the
 admin console's index rebuild, which copy `data/` into the organisation's documents.
