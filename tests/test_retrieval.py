@@ -37,10 +37,15 @@ def test_no_history_means_no_condensing(assistant):
 
 
 def test_a_follow_up_is_searched_with_the_previous_exchange(assistant):
+    from src.rag import follow_up
+
     history = [("My router's internet light is solid amber", "That usually means the login details are wrong.")]
-    r = assistant.retrieve("What do I do about it?", history, expand=False)
-    assert "LED status indicators" in r.docs[0].metadata["section"]
-    assert len(assistant.retrieve("What do I do about it?", history, top_k=1, expand=False).docs) == 1
+    question = "What do I do about it?"
+    r = assistant.retrieve(question, history, expand=False)
+    assert any("LED status indicators" in s for s in sections(r))
+    [(first, _)] = assistant._vector(follow_up(question, history), 1)
+    assert r.docs[0].metadata["hash"] == first.metadata["hash"]
+    assert len(assistant.retrieve(question, history, top_k=1, expand=False).docs) == 1
 
 
 @pytest.mark.llm
