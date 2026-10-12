@@ -36,6 +36,15 @@ def test_no_history_means_no_condensing(assistant):
     assert r.query == "What does the RX-900 cost?"
 
 
+def test_a_large_knowledge_base_shows_the_expander_only_its_nearest_sections(assistant, monkeypatch):
+    import src.rag
+
+    assert assistant._sections_for("router lights") == assistant.sections
+    monkeypatch.setattr(src.rag, "SECTION_BUDGET", 120)
+    listed = assistant._sections_for("What do the router's LED colours mean?")
+    assert len(listed) <= 120 and "LED status indicators" in listed
+
+
 def test_a_follow_up_is_searched_with_the_previous_exchange(assistant):
     from src.rag import follow_up
 

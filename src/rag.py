@@ -54,6 +54,7 @@ EXPAND_PROMPT = ChatPromptTemplate.from_messages([
     ("human", "{question}"),
 ])
 
+SECTION_BUDGET = 6000
 REFERENTIAL = re.compile(
     r"\b(it|its|that|this|those|these|they|them|their|he|she|his|her|"
     r"one|other|another|same|instead|then|also|too)\b",
@@ -86,6 +87,11 @@ def format_history(history: list[tuple[str, str]]) -> str:
             reply += "..."
         lines.append(f"Q: {q}\nA: {reply}")
     return "History:\n" + "\n".join(lines) + "\n\n"
+
+
+def heading(chunk: Document) -> str:
+    section = chunk.metadata.get("section") or chunk.metadata.get("doc_title") or ""
+    return f"{chunk.metadata['source_label']} > {section}" if section else chunk.metadata["source_label"]
 
 
 def follow_up(question: str, history: list[tuple[str, str]]) -> str:
@@ -147,15 +153,7 @@ class SupportAssistant:
         self.by_hash = {c.metadata["hash"]: c for c in self.chunks}
         self.bm25 = BM25Okapi([tokenize(c.page_content) for c in self.chunks])
 
-        seen: set[str] = set()
-        headings: list[str] = []
-        for c in self.chunks:
-            section = c.metadata.get("section") or c.metadata.get("doc_title") or ""
-            line = f"{c.metadata['source_label']} > {section}" if section else c.metadata["source_label"]
-            if line not in seen:
-                seen.add(line)
-                headings.append(line)
-        self.sections = "\n".join(headings)
+        self.sections = "\n".join(dict.fromkeys(heading(c) for c in self.chunks))
 
         from src.graph import build_graph
 
@@ -179,9 +177,20 @@ class SupportAssistant:
         order = sorted(range(len(scores)), key=lambda i: -scores[i])[:k]
         return [self.chunks[i] for i in order if scores[i] > 0]
 
+    def _sections_for(self, query: str) -> str:
+        if len(self.sections) <= SECTION_BUDGET:
+            return self.sections
+        lines, size = [], 0
+        for line in dict.fromkeys(heading(d) for d, _ in self._vector(query, 200)):
+            size += len(line) + 1
+            if size > SECTION_BUDGET:
+                break
+            lines.append(line)
+        return "\n".join(lines)
+
     def _expand(self, query: str) -> list[str]:
         try:
-            raw = self.expand_chain.invoke({"question": query, "sections": self.sections})
+            raw = self.expand_chain.invoke({"question": query, "sections": self._sections_for(query)})
             self.last_error = None
         except Exception as exc:
             self.last_error = f"Query expansion unavailable: {type(exc).__name__}: {exc}"
