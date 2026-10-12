@@ -63,17 +63,6 @@ def organisation(slug: str, name: str, labels: dict[str, str] | None = None, mod
     return SupportAssistant(tenant=slug, fallbacks=model, organisation=name)
 
 
-def best_similarity(bot, questions: list[str], batch: int = 256) -> list[float]:
-    from src.embeddings import MiniLMEmbeddings
-
-    out: list[float] = []
-    for i in range(0, len(questions), batch):
-        vectors = MiniLMEmbeddings().embed_documents(questions[i:i + batch])
-        found = bot.store._collection.query(query_embeddings=vectors, n_results=1, include=["distances"])
-        out += [max(0.0, 1.0 - d[0]) for d in found["distances"]]
-    return out
-
-
 def table(header: list[str], rows: list[list]) -> None:
     print("| " + " | ".join(header) + " |")
     print("|" + "---|" * len(header))
