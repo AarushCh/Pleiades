@@ -39,7 +39,7 @@ def test_no_history_means_no_condensing(assistant):
 def test_a_follow_up_is_searched_with_the_previous_exchange(assistant):
     history = [("My router's internet light is solid amber", "That usually means the login details are wrong.")]
     r = assistant.retrieve("What do I do about it?", history, expand=False)
-    assert any("LED status indicators" in s for s in sections(r))
+    assert "LED status indicators" in r.docs[0].metadata["section"]
 
 
 @pytest.mark.llm
