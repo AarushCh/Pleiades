@@ -63,6 +63,7 @@ async def lifespan(_: FastAPI):
     STATE["database"] = await asyncio.to_thread(init_db)
     if not config.CHROMA_DIR.exists():
         raise RuntimeError("No vector index. Run: python -m src.ingest")
+    await asyncio.to_thread(refresh_home)
     STATE["bots"] = {}
     home = STATE["bots"][config.DEFAULT_TENANT] = await asyncio.to_thread(assistant, config.DEFAULT_TENANT)
     STATE["answering"], STATE["llm_failures"] = await asyncio.to_thread(
@@ -126,6 +127,12 @@ def bot(tenant: str | None = None) -> SupportAssistant:
     if slug not in bots:
         bots[slug] = assistant(slug)
     return bots[slug]
+
+
+def refresh_home() -> None:
+    with SessionLocal() as session:
+        seed_documents(session)
+    build_index(config.DEFAULT_TENANT)
 
 
 def assistant(slug: str) -> SupportAssistant:

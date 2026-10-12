@@ -26,7 +26,7 @@ The demo tenant is **Nimbus Networks**, a fictional ISP.
 | `.\run.ps1 dev` | API with reload on `:8000`, Next dev server on `:5173` |
 | `.\run.ps1 demo` | Scripted five-question walkthrough in the terminal |
 | `.\run.ps1 cli` | Interactive terminal client |
-| `.\run.ps1 test` | pytest suite (112 tests) |
+| `.\run.ps1 test` | pytest suite (113 tests) |
 | `.\run.ps1 eval` | Retrieval recall benchmark |
 | `.\run.ps1 backend` | Reports which model is live and makes a test call |
 
@@ -608,7 +608,7 @@ src/cli.py         terminal client
 src/app.py         Streamlit UI (alternative to the Next.js one)
 api/               FastAPI service, SSE streaming, session store
 frontend/          Next.js app router, glass design system
-tests/             112 tests, LLM-dependent ones skip unless a backend answers
+tests/             113 tests, LLM-dependent ones skip unless a backend answers
 training/          training data, the embedder and answering-model fine-tunes, the project assistant
 eval/              retrieval and answer benchmarks, doc2dial recall, Bitext intent coverage
 ```
@@ -696,8 +696,11 @@ states the rule in one clause and the cancellation answer opens with the custome
 ("cancel, end or terminate your plan, contract or subscription"): cancel_plan reaches it 67% of
 the time (58% before the change), and the golden set is unchanged at 14 of 15.
 
-A new or changed document reaches a running deployment through `python -m src.db setup` or the
-admin console's index rebuild, which copy `data/` into the organisation's documents.
+On startup the server copies `data/` into the home organisation's stored documents and brings its
+index up to date, so a deploy serves the documents it shipped with. It used to read the stored
+copy but search an index baked from the files at build time, and when the two differed (any
+document changed without a reseed) every search hit the stored copy didn't know was silently
+dropped. Other organisations pick up changed documents through the admin console's index rebuild.
 
 ## Demo script
 
